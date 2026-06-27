@@ -1,0 +1,10 @@
+bin/
+obj/
+.git/
+.gitignore
+.vs/
+.vscode/
+*.user
+README.md
+docs/
+**/appsettings.Development.json
