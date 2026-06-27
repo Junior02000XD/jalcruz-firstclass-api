@@ -38,6 +38,7 @@ public class ProspectsController(AppDbContext db) : ControllerBase
             .Include(p => p.Campaign).Include(p => p.Zone).Include(p => p.Entity)
             .Include(p => p.TrialClasses)
             .Include(p => p.Reminders)
+            .Include(p => p.Enrollments).ThenInclude(e => e.Product)
             .FirstOrDefaultAsync(p => p.Id == id);
         return prospect is null ? NotFound() : Ok(prospect);
     }
@@ -58,6 +59,47 @@ public class ProspectsController(AppDbContext db) : ControllerBase
         };
         db.Prospects.Add(prospect);
         await db.SaveChangesAsync();
+        return CreatedAtAction(nameof(Show), new { id = prospect.Id }, prospect);
+    }
+
+    /// <summary>
+    /// Alta rápida desde móvil: crea Persona (+ teléfono opcional) y Prospecto en una transacción.
+    /// </summary>
+    [HttpPost("quick")]
+    public async Task<IActionResult> QuickCreate(ProspectQuickInput input)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync();
+
+        var person = new Person
+        {
+            FirstName = input.FirstName,
+            LastName = string.IsNullOrWhiteSpace(input.LastName) ? "" : input.LastName,
+        };
+        db.People.Add(person);
+        await db.SaveChangesAsync();
+
+        if (!string.IsNullOrWhiteSpace(input.Phone))
+        {
+            db.Phones.Add(new Phone { PersonId = person.Id, Number = input.Phone.Trim(), Label = "WhatsApp" });
+            await db.SaveChangesAsync();
+        }
+
+        var prospect = new Prospect
+        {
+            PersonId = person.Id,
+            CampaignId = input.CampaignId,
+            ZoneId = input.ZoneId,
+            Origin = input.Origin,
+            Address = input.Address,
+            Notes = input.Notes,
+            Status = ParseStatus(input.Status),
+        };
+        db.Prospects.Add(prospect);
+        await db.SaveChangesAsync();
+
+        await tx.CommitAsync();
+
+        await db.Entry(prospect).Reference(p => p.Person).LoadAsync();
         return CreatedAtAction(nameof(Show), new { id = prospect.Id }, prospect);
     }
 

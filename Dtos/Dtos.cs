@@ -89,6 +89,25 @@ public record ProspectInput(
     string? Notes,
     string? Status);
 
+// Alta rápida de prospecto desde móvil: crea Persona (+ teléfono) y Prospecto en una sola llamada.
+public record ProspectQuickInput(
+    [Required] string FirstName,
+    string? LastName,
+    string? Phone,
+    int? CampaignId,
+    int? ZoneId,
+    string? Origin,
+    string? Address,
+    string? Notes,
+    string? Status);
+
+public record EnrollmentInput(
+    [Required] int ProspectId,
+    [Required] int ProductId,
+    [Required] DateOnly EnrollmentDate,
+    string? ReceiptNumber,
+    decimal? Commission);
+
 public record TrialClassInput(
     [Required] int ProspectId,
     int? TeacherId,
