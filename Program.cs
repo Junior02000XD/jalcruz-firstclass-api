@@ -52,7 +52,7 @@ builder.Services.AddAuthorization();
 var allowedOrigins = (config["Cors:AllowedOrigins"] ?? "http://localhost:5173")
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
+    p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
 
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
