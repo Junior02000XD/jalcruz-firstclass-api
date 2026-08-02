@@ -7,6 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Cloudflare R2 habla el protocolo de S3, así que se usa el SDK de AWS. -->
+    <PackageReference Include="AWSSDK.S3" Version="3.7.416.4" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />

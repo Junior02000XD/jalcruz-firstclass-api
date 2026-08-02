@@ -31,6 +31,24 @@ builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<PayrollExportService>();
 
+// ── Cloudflare R2 (multimedia del agente) ──
+// Se registra sólo si está configurado: sin estas variables la API arranca igual
+// y todo lo demás funciona; únicamente /api/media responde 503. Así el resto del
+// CRM no queda de rehén de una credencial de almacenamiento.
+var r2Endpoint = config["R2:Endpoint"];
+if (!string.IsNullOrWhiteSpace(r2Endpoint))
+{
+    builder.Services.AddSingleton(new R2Options
+    {
+        Endpoint = r2Endpoint,
+        AccessKeyId = config["R2:AccessKeyId"] ?? throw new InvalidOperationException("Falta R2:AccessKeyId."),
+        SecretAccessKey = config["R2:SecretAccessKey"] ?? throw new InvalidOperationException("Falta R2:SecretAccessKey."),
+        Bucket = config["R2:Bucket"] ?? throw new InvalidOperationException("Falta R2:Bucket."),
+        PublicBaseUrl = config["R2:PublicBaseUrl"] ?? throw new InvalidOperationException("Falta R2:PublicBaseUrl."),
+    });
+    builder.Services.AddSingleton<R2StorageService>();
+}
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
