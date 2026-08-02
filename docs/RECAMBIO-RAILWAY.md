@@ -61,6 +61,19 @@ porque Meta descarga los archivos desde sus servidores y porque una URL firmada
 —que cambia en cada generación— rompería la respuesta byte a byte de
 `/api/agent-context`, de la que depende el prompt caching.
 
+El bucket (`media`) y el dominio `media.cruzk.dev` **ya están creados y
+verificados**; estas variables sólo hay que copiarlas al proyecto nuevo. Las
+credenciales son un **Account API Token** de R2 con permiso *Object Read &
+Write* acotado al bucket: un token de usuario moriría si esa persona sale de la
+cuenta.
+
+> ⚠️ **Un archivo borrado sigue descargándose hasta 4 horas.** El dominio propio
+> pasa por la CDN de Cloudflare, que cachea con `max-age=14400`. El `DELETE` saca
+> el objeto del bucket de inmediato (comprobado con un `?cb=` que saltea el
+> caché), pero el edge sigue sirviendo su copia. No es problema para el uso
+> normal —al contrario, las descargas de Meta salen del caché— pero si hay que
+> hacer desaparecer algo ya, se purga desde Cloudflare → *Caching* → *Purge*.
+
 Las tres `Seed__CrmUser*` son las que crean la cuenta que recibe las
 conversaciones derivadas por la IA (`prospects.assigned_to_user_id`). **Si falta
 el correo o la contraseña, la cuenta no se crea** — es a propósito, para que no
