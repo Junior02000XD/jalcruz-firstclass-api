@@ -29,7 +29,7 @@ public class MapEnumJsonConverter<TEnum>(IReadOnlyDictionary<TEnum, string> map)
 
 public static class EnumJsonConverters
 {
-    /// <summary>Registra los convertidores de los 5 enums del dominio.</summary>
+    /// <summary>Registra los convertidores de los 7 enums del dominio.</summary>
     public static void AddDomainEnumConverters(this IList<JsonConverter> converters)
     {
         converters.Add(new MapEnumJsonConverter<Reliability>(EnumMaps.Reliability));
@@ -37,5 +37,7 @@ public static class EnumJsonConverters
         converters.Add(new MapEnumJsonConverter<EntityType>(EnumMaps.EntityType));
         converters.Add(new MapEnumJsonConverter<ProspectStatus>(EnumMaps.ProspectStatus));
         converters.Add(new MapEnumJsonConverter<TrialClassStatus>(EnumMaps.TrialClassStatus));
+        converters.Add(new MapEnumJsonConverter<MessageDirection>(EnumMaps.MessageDirection));
+        converters.Add(new MapEnumJsonConverter<MessageOrigin>(EnumMaps.MessageOrigin));
     }
 }

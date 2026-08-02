@@ -46,6 +46,20 @@ public enum TrialClassStatus
     Rescheduled     // "reprogramada"
 }
 
+/// <summary>Sentido de un mensaje de WhatsApp visto desde el instituto.</summary>
+public enum MessageDirection
+{
+    Inbound,        // "entrante"
+    Outbound        // "saliente"
+}
+
+/// <summary>Quién produjo el mensaje: el agente de IA o una persona.</summary>
+public enum MessageOrigin
+{
+    Ai,             // "ia"
+    Human           // "humano"
+}
+
 /// <summary>
 /// Conversores entre los enums de C# y los strings persistidos (compatibles con Laravel).
 /// Se usan en AppDbContext para configurar las columnas y en los reportes.
@@ -88,5 +102,17 @@ public static class EnumMaps
         [Domain.TrialClassStatus.Completed] = "realizada",
         [Domain.TrialClassStatus.Cancelled] = "cancelada",
         [Domain.TrialClassStatus.Rescheduled] = "reprogramada",
+    };
+
+    public static readonly Dictionary<MessageDirection, string> MessageDirection = new()
+    {
+        [Domain.MessageDirection.Inbound] = "entrante",
+        [Domain.MessageDirection.Outbound] = "saliente",
+    };
+
+    public static readonly Dictionary<MessageOrigin, string> MessageOrigin = new()
+    {
+        [Domain.MessageOrigin.Ai] = "ia",
+        [Domain.MessageOrigin.Human] = "humano",
     };
 }

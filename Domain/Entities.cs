@@ -45,6 +45,14 @@ public class Phone : BaseEntity
     public Person Person { get; set; } = null!;
     public string Number { get; set; } = null!;
     public string? Label { get; set; }   // "WhatsApp", "Casa", "Trabajo"
+
+    /// <summary>
+    /// Number en forma canónica (sólo dígitos, con código de país) para poder
+    /// buscar por el número que manda Meta en cada mensaje entrante. La mantiene
+    /// AppDbContext.SaveChanges, no los controllers: así ninguna ruta que cree o
+    /// edite un teléfono puede olvidarse de actualizarla. Ver PhoneNormalizer.
+    /// </summary>
+    public string? NormalizedNumber { get; set; }
 }
 
 /// <summary>Universidad / Empresa / Convenio asociable a un prospecto.</summary>
@@ -169,9 +177,22 @@ public class Prospect : BaseEntity
     public string? Notes { get; set; }
     public ProspectStatus Status { get; set; } = ProspectStatus.New;
 
+    /// <summary>
+    /// Humano que tomó la conversación (hand-off). Null = la atiende el agente de IA.
+    /// El agente lo consulta antes de cada respuesta: si tiene valor, no contesta.
+    ///
+    /// Se serializa SIEMPRE, incluso en null: la opción global del proyecto omite
+    /// los nulos, y un campo ausente obligaría al agente a distinguir "sin asignar"
+    /// de "no vino en la respuesta". Acá el null es la información.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public int? AssignedToUserId { get; set; }
+    public User? AssignedTo { get; set; }
+
     public ICollection<TrialClass> TrialClasses { get; set; } = new List<TrialClass>();
     public ICollection<Reminder> Reminders { get; set; } = new List<Reminder>();
     public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
+    [JsonIgnore] public ICollection<Message> Messages { get; set; } = new List<Message>();
 }
 
 public class TrialClass : BaseEntity
@@ -199,6 +220,44 @@ public class Reminder : BaseEntity
     public string Note { get; set; } = null!;
     public DateTime RemindAt { get; set; }
     public bool IsDone { get; set; }
+}
+
+/// <summary>
+/// Historial de chat de WhatsApp de un prospecto. Es el contexto que lee el
+/// agente de IA antes de responder y el registro de lo que ya se contestó.
+/// </summary>
+public class Message : BaseEntity
+{
+    public int ProspectId { get; set; }
+    public Prospect Prospect { get; set; } = null!;
+
+    public MessageDirection Direction { get; set; }
+
+    /// <summary>
+    /// Quién escribió el mensaje. Distingue lo que mandó el bot de lo que
+    /// escribió el dueño del número desde su propio WhatsApp (los ecos de
+    /// Coexistence llegan como salientes): un saliente con origen "humano" es
+    /// la señal de que alguien tomó la conversación a mano.
+    /// </summary>
+    public MessageOrigin Origin { get; set; } = MessageOrigin.Human;
+
+    public string Content { get; set; } = null!;
+
+    /// <summary>
+    /// Id del adjunto una vez guardado. Sin FK a propósito: la entidad
+    /// MediaAsset llega en la Fase B y todavía no existe.
+    /// </summary>
+    public int? MediaAssetId { get; set; }
+
+    /// <summary>URL temporal del adjunto en los servidores de Meta (caduca).</summary>
+    public string? WhatsappMediaUrl { get; set; }
+
+    /// <summary>
+    /// wamid de Meta. Es la clave de idempotencia: Meta reintenta el webhook y
+    /// el mismo mensaje puede llegar dos veces. Nullable porque un saliente se
+    /// registra antes de que Meta devuelva su id.
+    /// </summary>
+    public string? WhatsappMessageId { get; set; }
 }
 
 public class Enrollment : BaseEntity

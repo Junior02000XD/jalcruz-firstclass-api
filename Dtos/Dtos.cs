@@ -101,6 +101,31 @@ public record ProspectQuickInput(
     string? Notes,
     string? Status);
 
+// Cambio de estado sin el riesgo del PUT completo, que pisa con null los campos
+// que el payload no traiga. Lo usa el agente de n8n tras cada conversación.
+public record ProspectStatusPatchInput([Required] string Status);
+
+// Hand-off: asignar el prospecto a un humano o devolvérselo a la IA.
+// Va aparte del PATCH de estado a propósito: al ser el único campo del cuerpo,
+// mandar null significa "limpiar" sin ambigüedad con "no lo mandé".
+public record ProspectAssignmentPatchInput(int? AssignedToUserId);
+
+public record ReminderInput(
+    [Required] int ProspectId,
+    [Required] string Note,
+    [Required] DateTime RemindAt,
+    bool? IsDone);
+
+// Alta de mensaje del historial de WhatsApp. Idempotente por WhatsappMessageId.
+public record MessageInput(
+    [Required] int ProspectId,
+    [Required] string Direction,
+    string? Origin,
+    string? Content,
+    int? MediaAssetId,
+    string? WhatsappMediaUrl,
+    string? WhatsappMessageId);
+
 public record EnrollmentInput(
     [Required] int ProspectId,
     [Required] int ProductId,

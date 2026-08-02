@@ -1,4 +1,5 @@
 using JalcruzFirstClass.Api.Domain;
+using JalcruzFirstClass.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -26,6 +27,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TrialClass> TrialClasses => Set<TrialClass>();
     public DbSet<Reminder> Reminders => Set<Reminder>();
     public DbSet<Enrollment> Enrollments => Set<Enrollment>();
+    public DbSet<Message> Messages => Set<Message>();
 
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
@@ -46,6 +48,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasConversion(MapConverter(EnumMaps.ProspectStatus));
         b.Entity<TrialClass>().Property(x => x.Status)
             .HasConversion(MapConverter(EnumMaps.TrialClassStatus));
+        b.Entity<Message>().Property(x => x.Direction)
+            .HasConversion(MapConverter(EnumMaps.MessageDirection));
+        b.Entity<Message>().Property(x => x.Origin)
+            .HasConversion(MapConverter(EnumMaps.MessageOrigin));
 
         // ── Índices y restricciones (espejan las migraciones de Laravel) ──
         b.Entity<City>().HasIndex(x => x.Name).IsUnique();
@@ -54,6 +60,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Payroll>().HasIndex(x => x.Code).IsUnique();
         b.Entity<User>().HasIndex(x => x.Email).IsUnique();
         b.Entity<Role>().HasIndex(x => x.Name).IsUnique();
+
+        // Lookup por teléfono normalizado: corre una vez por cada mensaje entrante
+        // de WhatsApp, así que no puede ser un scan.
+        //
+        // NO es único a propósito: `phones` la comparten los dos módulos, y en RRHH
+        // es legítimo que dos trabajadores compartan un número de contacto. La
+        // unicidad del prospecto por número la garantiza el advisory lock de
+        // ProspectsController.QuickCreate. Ver docs/WHATSAPP-CRM.md.
+        b.Entity<Phone>().HasIndex(x => x.NormalizedNumber);
+
+        // Idempotencia de POST /api/messages: Meta reintenta el webhook y el mismo
+        // wamid puede llegar dos veces. Filtrado porque los salientes se registran
+        // sin id todavía, y varios NULL no chocan entre sí.
+        b.Entity<Message>().HasIndex(x => x.WhatsappMessageId)
+            .IsUnique()
+            .HasFilter("whatsapp_message_id IS NOT NULL");
+
+        // Historial de un prospecto en orden cronológico (GET /api/prospects/{id}/messages).
+        b.Entity<Message>().HasIndex(x => new { x.ProspectId, x.CreatedAt });
 
         // Relación 1:1 Person <-> WorkerDetail.
         b.Entity<WorkerDetail>().HasIndex(x => x.PersonId).IsUnique();
@@ -92,6 +117,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(p => p.EntityId).OnDelete(DeleteBehavior.SetNull);
         b.Entity<Prospect>().HasOne(p => p.Zone).WithMany(z => z.Prospects)
             .HasForeignKey(p => p.ZoneId).OnDelete(DeleteBehavior.SetNull);
+        // Si se borra el usuario que tomó la conversación, el prospecto vuelve a la IA.
+        b.Entity<Prospect>().HasOne(p => p.AssignedTo).WithMany()
+            .HasForeignKey(p => p.AssignedToUserId).OnDelete(DeleteBehavior.SetNull);
+
+        b.Entity<Message>().HasOne(m => m.Prospect).WithMany(p => p.Messages)
+            .HasForeignKey(m => m.ProspectId).OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<TrialClass>().HasOne(t => t.Prospect).WithMany(p => p.TrialClasses)
             .HasForeignKey(t => t.ProspectId).OnDelete(DeleteBehavior.Cascade);
@@ -146,12 +177,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public override Task<int> SaveChangesAsync(CancellationToken ct = default)
     {
         StampTimestamps();
+        NormalizePhones();
         return base.SaveChangesAsync(ct);
     }
 
     public override int SaveChanges()
     {
         StampTimestamps();
+        NormalizePhones();
         return base.SaveChanges();
     }
 
@@ -169,6 +202,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             {
                 entry.Entity.UpdatedAt = now;
             }
+        }
+    }
+
+    /// <summary>
+    /// Recalcula NormalizedNumber en cada alta/edición de teléfono.
+    /// Va acá y no en los controllers para que la columna no pueda quedar
+    /// desincronizada: si queda vieja, el prospecto se vuelve invisible para el
+    /// lookup por WhatsApp y n8n lo duplica.
+    /// </summary>
+    private void NormalizePhones()
+    {
+        foreach (var entry in ChangeTracker.Entries<Phone>())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Modified)) continue;
+            entry.Entity.NormalizedNumber = PhoneNormalizer.Normalize(entry.Entity.Number);
         }
     }
 }
