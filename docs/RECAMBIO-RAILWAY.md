@@ -49,6 +49,17 @@ Enlazar el Postgres al servicio de la API para que aparezca `DATABASE_URL`.
 | `Seed__CrmUserName` | `Susanne` | |
 | `Seed__CrmUserEmail` | correo de mamá | |
 | `Seed__CrmUserPassword` | **contraseña fuerte** | |
+| `R2__Endpoint` | `https://<account_id>.r2.cloudflarestorage.com` | Multimedia del agente |
+| `R2__AccessKeyId` | token de API de R2 | |
+| `R2__SecretAccessKey` | token de API de R2 | |
+| `R2__Bucket` | `media` | |
+| `R2__PublicBaseUrl` | `https://media.cruzk.dev` | Dominio propio del bucket público |
+
+Las `R2__*` son opcionales para arrancar: si faltan, la API levanta igual y sólo
+`/api/media` responde 503. El bucket va **público detrás de un dominio propio**
+porque Meta descarga los archivos desde sus servidores y porque una URL firmada
+—que cambia en cada generación— rompería la respuesta byte a byte de
+`/api/agent-context`, de la que depende el prompt caching.
 
 Las tres `Seed__CrmUser*` son las que crean la cuenta que recibe las
 conversaciones derivadas por la IA (`prospects.assigned_to_user_id`). **Si falta
@@ -62,13 +73,14 @@ secciones anidadas desde el entorno.
 ## 3. Primer despliegue = migraciones + seeder
 
 No hay paso manual de migraciones: la API corre `Database.MigrateAsync()` y el
-seeder al arrancar. Sobre una base vacía crea las 21 tablas, los 3 roles y las
+seeder al arrancar. Sobre una base vacía crea las 25 tablas, los 3 roles y las
 2 cuentas.
 
 Verificar en **Deploy Logs**:
 
 ```
 Applying migration '20260802012802_InitialCreate'.
+Applying migration '20260802020010_ContenidoDelAgente'.
 Super Admin inicial creado: <correo>
 Usuario de CRM creado: <correo>
 ```
@@ -76,7 +88,7 @@ Usuario de CRM creado: <correo>
 Y contra la base (pestaña *Data* del Postgres, o `psql`):
 
 ```sql
-SELECT migration_id FROM "__EFMigrationsHistory";   -- 1 fila: InitialCreate
+SELECT migration_id FROM "__EFMigrationsHistory";   -- InitialCreate + ContenidoDelAgente
 SELECT u.email, r.name FROM users u
   JOIN user_roles ur ON ur.user_id = u.id
   JOIN roles r ON r.id = ur.role_id;                -- Super Admin + CRM Admin
@@ -109,8 +121,9 @@ hace la persona, y el `assigned_to_user_id` del hand-off perdería sentido.
 No hay endpoint de alta directa; son dos llamadas:
 
 ```bash
-# 1. Registrar (endpoint público, queda SIN roles y por lo tanto sin acceso)
-curl -s -X POST $API/api/register -H 'Content-Type: application/json' \
+# 1. Crear el usuario (requiere el token del Super Admin; queda SIN roles)
+curl -s -X POST $API/api/register -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
   -d '{"name":"Agente n8n","email":"n8n@firstclass...","password":"<clave larga>"}'
 
 # 2. Asignarle el rol, como Super Admin
@@ -120,10 +133,9 @@ curl -s -X POST $API/api/users/<id>/roles -H "Authorization: Bearer $TOKEN" \
 
 Después, cargar ese correo y contraseña en las credenciales de n8n.
 
-> **Nota de seguridad:** `POST /api/register` es público. Un desconocido puede
-> crearse una cuenta, aunque queda sin roles y sin acceso a nada hasta que un
-> Super Admin se los asigne. Si molesta, es un `[Authorize]` de una línea —
-> pero entonces las altas pasan a depender de un admin logueado.
+> `POST /api/register` **ya no es público**: exige el token del Super Admin, así
+> que el `$TOKEN` del paso 4 tiene que seguir vigente. En el panel, la pantalla
+> de alta quedó en `/register` y sólo la ve el Super Admin.
 
 ## 6. Frontend
 
@@ -161,10 +173,10 @@ el `pg_dump` del paso 0, esos datos no existen más.
 
 Sobre un Postgres descartable y vacío, con estas mismas variables:
 
-- `dotnet ef database update` aplica la única migración y crea las 21 tablas
+- `dotnet ef database update` aplica las migraciones y crea las 25 tablas
   + `__EFMigrationsHistory`, con los 3 roles sembrados.
 - Arrancar sólo la app contra una base **virgen** (sin paso de CLI, que es como
-  lo hará Railway) crea todo igual: 22 tablas y las 2 cuentas.
+  lo hará Railway) crea todo igual: 26 tablas y las 2 cuentas.
 - Login correcto con las dos cuentas, con sus roles (`Super Admin` / `CRM Admin`).
 - Con el token de Susanne: `quick`, `by-phone`, `POST messages` (incluida la
   repetición idempotente → 200), los dos PATCH, el historial y `reminders`.

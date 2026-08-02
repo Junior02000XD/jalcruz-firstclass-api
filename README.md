@@ -29,18 +29,20 @@ Dos módulos sobre la misma base de datos PostgreSQL:
 Domain/        Enums.cs (mapas enum↔string), Entities.cs (modelo de dominio + RBAC)
 Data/          AppDbContext.cs, DbSeeder.cs, DesignTimeDbContextFactory.cs
 Dtos/          Dtos.cs (inputs de request validados con DataAnnotations)
-Services/      JwtTokenService, PayrollExportService, EnumJsonConverters
+Services/      JwtTokenService, PayrollExportService, EnumJsonConverters,
+               PhoneNormalizer, R2StorageService
 Controllers/   Auth, Users, People, Cities, Zones, Companies, WorkAreas,
                WorkerDetails, Payrolls, Attendances, Teachers, Campaigns,
-               Prospects, TrialClasses, Reports
-Migrations/    InitialCreate (esquema EF Core)
+               Prospects, TrialClasses, Reports, Reminders, Messages,
+               MediaAssets, ContextEntries, Personas, AgentContext
+Migrations/    InitialCreate (esquema base) + ContenidoDelAgente (Fase B)
 Program.cs     DI, JWT, CORS, JSON snake_case, migración+seed al arrancar
 ```
 
 ## Endpoints (mismos paths que el Laravel original)
 
-Públicos: `POST /api/login`, `POST /api/register`.
-Resto bajo `Authorization: Bearer <token>` y rol correspondiente.
+Público: `POST /api/login`. El resto —incluido `POST /api/register`, que es
+sólo del Super Admin— va con `Authorization: Bearer <token>` y su rol.
 
 | Recurso | Rol | Notas |
 |---------|-----|-------|
@@ -51,13 +53,16 @@ Resto bajo `Authorization: Bearer <token>` y rol correspondiente.
 | `reports/payroll/{id}` | HR · Super | Total a pagar (incluye `extra_amount`) |
 | `campaigns`, `prospects`, `trial-classes`, `teachers` | CRM · Super | Módulo First Class |
 | `reminders`, `messages` | CRM · Super | Seguimientos e historial de chat |
+| `context-entries`, `media`, `personas` | CRM · Super | Contenido que usa la IA para responder |
+| `agent-context/{phoneNumberId}` | CRM · Super | Todo el contexto del agente en una llamada |
 | `reports/funnel`, `reports/marketing-roi` | CRM · Super | Embudo y ROI |
 
 Los que consume el agente de WhatsApp en n8n — con sus reglas de idempotencia,
 que no son obvias — están en **[docs/WHATSAPP-CRM.md](docs/WHATSAPP-CRM.md)**:
 `GET prospects/by-phone/{numero}`, `POST prospects/quick`,
 `PATCH prospects/{id}/status`, `PATCH prospects/{id}/assignment`,
-`POST messages` y `GET prospects/{id}/messages`.
+`POST messages`, `GET prospects/{id}/messages` y
+`GET agent-context/{phoneNumberId}`.
 
 > **Mejoras frente al Laravel original:** se corrigió el bug de `marketing-roi`
 > (comparaba `'Inscrito'` con mayúscula y siempre daba 0 inscritos) y el
