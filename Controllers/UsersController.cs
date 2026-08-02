@@ -24,6 +24,23 @@ public class UsersController(AppDbContext db) : ControllerBase
         return Ok(users);
     }
 
+    /// <summary>
+    /// Personas del CRM a las que se le puede derivar una conversación, con lo
+    /// justo para llenar un desplegable (id y nombre, sin correos ni roles).
+    ///
+    /// Existe porque el resto del controller es sólo para Super Admin y quien
+    /// carga los flujos del embudo es un CRM Admin: aflojar el Index entero para
+    /// llenar un select habría expuesto de más.
+    /// </summary>
+    [HttpGet("assignable")]
+    [Authorize(Roles = $"{Roles.CrmAdmin},{Roles.SuperAdmin}")]
+    public async Task<IActionResult> Assignable()
+        => Ok(await db.Users
+            .Where(u => u.UserRoles.Any(ur => ur.Role.Name == Roles.CrmAdmin || ur.Role.Name == Roles.SuperAdmin))
+            .OrderBy(u => u.Name)
+            .Select(u => new { u.Id, u.Name })
+            .ToListAsync());
+
     [HttpPost("{userId:int}/roles")]
     public async Task<IActionResult> AssignRoles(int userId, AssignRolesRequest req)
     {

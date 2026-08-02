@@ -34,8 +34,14 @@ public class AuthController(AppDbContext db, JwtTokenService jwt) : ControllerBa
             new UserDto(user.Id, user.Name, user.Email, roles)));
     }
 
+    /// <summary>
+    /// Alta de usuario. Reservada al Super Admin: a esta escala las cuentas las
+    /// crea el administrador, no se auto-registran. Antes era pública y, aunque
+    /// la cuenta nacía sin roles y sin acceso, dejaba que cualquiera llenara la
+    /// tabla de usuarios desde internet.
+    /// </summary>
     [HttpPost("register")]
-    [AllowAnonymous]
+    [Authorize(Roles = Roles.SuperAdmin)]
     public async Task<IActionResult> Register(RegisterRequest req)
     {
         if (await db.Users.AnyAsync(u => u.Email == req.Email))
