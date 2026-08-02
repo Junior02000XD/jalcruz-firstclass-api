@@ -7,12 +7,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace JalcruzFirstClass.Api.Controllers;
 
+// El [Authorize] va en cada acción y NO en la clase a propósito. En ASP.NET Core
+// los filtros de autorización de la clase y de la acción se SUMAN: el de la
+// acción no reemplaza al de la clase, hay que pasar los dos. Con
+// `[Authorize(Roles = SuperAdmin)]` acá arriba, el `[Authorize(Roles =
+// "CRM Admin,Super Admin")]` de Assignable quedaba en "SuperAdmin Y (CrmAdmin O
+// SuperAdmin)", o sea sólo Super Admin, y un CRM Admin recibía 403 al abrir el
+// desplegable de derivación de ContentPage.
 [ApiController]
 [Route("api/users")]
-[Authorize(Roles = Roles.SuperAdmin)]
 public class UsersController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Roles = Roles.SuperAdmin)]
     public async Task<IActionResult> Index()
     {
         var users = await db.Users
@@ -42,6 +49,7 @@ public class UsersController(AppDbContext db) : ControllerBase
             .ToListAsync());
 
     [HttpPost("{userId:int}/roles")]
+    [Authorize(Roles = Roles.SuperAdmin)]
     public async Task<IActionResult> AssignRoles(int userId, AssignRolesRequest req)
     {
         var user = await db.Users
@@ -65,6 +73,7 @@ public class UsersController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("{userId:int}")]
+    [Authorize(Roles = Roles.SuperAdmin)]
     public async Task<IActionResult> Destroy(int userId)
     {
         var user = await db.Users.FindAsync(userId);
