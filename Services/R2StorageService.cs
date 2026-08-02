@@ -1,3 +1,4 @@
+using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 
@@ -37,6 +38,15 @@ public class R2StorageService(R2Options options)
             AuthenticationRegion = "auto",
             // Sin esto el SDK arma https://<bucket>.<endpoint>, que en R2 no resuelve.
             ForcePathStyle = true,
+            // El SDK calcula un checksum en cada PUT y lo manda en un *trailer* con
+            // codificación aws-chunked. R2 responde
+            // "STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER not implemented" y la subida
+            // falla. Con WhenRequired sólo lo agrega si la operación lo exige —para
+            // PutObject no— y la firma vuelve a ser la del payload completo, que R2 sí
+            // entiende. Verificado contra el bucket real: MinIO no sirve para detectar
+            // esto porque sí implementa el trailer.
+            RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
+            ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED,
         });
 
     public async Task<(string Url, string ObjectKey)> UploadAsync(
@@ -67,6 +77,11 @@ public class R2StorageService(R2Options options)
                 Key = key,
                 InputStream = payload,
                 ContentType = contentType,
+                // Sin esto el SDK manda el cuerpo troceado y firmado por chunks, y R2
+                // contesta "STREAMING-AWS4-HMAC-SHA256-PAYLOAD not implemented". En
+                // false firma el hash del contenido completo —de ahí que el stream
+                // tenga que ser seekable— que es la única forma que R2 acepta.
+                UseChunkEncoding = false,
             }, ct);
         }
         finally
