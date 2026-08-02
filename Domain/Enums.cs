@@ -46,6 +46,31 @@ public enum TrialClassStatus
     Rescheduled     // "reprogramada"
 }
 
+/// <summary>Tipo de archivo que la IA puede mandar por WhatsApp.</summary>
+public enum MediaType
+{
+    Image,          // "imagen"
+    Audio           // "audio"
+}
+
+/// <summary>Clase de contenido de negocio que el agente lee para armar el prompt.</summary>
+public enum ContextEntryType
+{
+    QuestionAnswer, // "pregunta_respuesta"
+    Rule,           // "regla"
+    Promotion,      // "promocion"
+    Flow            // "flujo"
+}
+
+/// <summary>Paso siguiente que un flujo del embudo le indica al agente.</summary>
+public enum NextAction
+{
+    SendLevelTest,     // "enviar_test_nivel"
+    AskName,           // "pedir_nombre"
+    OfferTrialClass,   // "ofrecer_clase_prueba"
+    Handoff            // "derivar"
+}
+
 /// <summary>Sentido de un mensaje de WhatsApp visto desde el instituto.</summary>
 public enum MessageDirection
 {
@@ -102,6 +127,52 @@ public static class EnumMaps
         [Domain.TrialClassStatus.Completed] = "realizada",
         [Domain.TrialClassStatus.Cancelled] = "cancelada",
         [Domain.TrialClassStatus.Rescheduled] = "reprogramada",
+    };
+
+    /// <summary>
+    /// Parseo tolerante para los controllers: acepta el valor persistido
+    /// ("promocion") o el nombre del enum ("Promotion"). Devuelve false en vez de
+    /// un valor por defecto, para que un payload mal escrito termine en 400 y no
+    /// en un dato silenciosamente equivocado.
+    /// </summary>
+    public static bool TryParse<TEnum>(IReadOnlyDictionary<TEnum, string> map, string? value, out TEnum result)
+        where TEnum : struct, Enum
+    {
+        result = default;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        foreach (var (key, text) in map)
+        {
+            if (string.Equals(text, value, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(key.ToString(), value, StringComparison.OrdinalIgnoreCase))
+            {
+                result = key;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static readonly Dictionary<MediaType, string> MediaType = new()
+    {
+        [Domain.MediaType.Image] = "imagen",
+        [Domain.MediaType.Audio] = "audio",
+    };
+
+    public static readonly Dictionary<ContextEntryType, string> ContextEntryType = new()
+    {
+        [Domain.ContextEntryType.QuestionAnswer] = "pregunta_respuesta",
+        [Domain.ContextEntryType.Rule] = "regla",
+        [Domain.ContextEntryType.Promotion] = "promocion",
+        [Domain.ContextEntryType.Flow] = "flujo",
+    };
+
+    public static readonly Dictionary<NextAction, string> NextAction = new()
+    {
+        [Domain.NextAction.SendLevelTest] = "enviar_test_nivel",
+        [Domain.NextAction.AskName] = "pedir_nombre",
+        [Domain.NextAction.OfferTrialClass] = "ofrecer_clase_prueba",
+        [Domain.NextAction.Handoff] = "derivar",
     };
 
     public static readonly Dictionary<MessageDirection, string> MessageDirection = new()

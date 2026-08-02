@@ -28,6 +28,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Reminder> Reminders => Set<Reminder>();
     public DbSet<Enrollment> Enrollments => Set<Enrollment>();
     public DbSet<Message> Messages => Set<Message>();
+    public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
+    public DbSet<ContextEntry> ContextEntries => Set<ContextEntry>();
+    public DbSet<ContextEntryMedia> ContextEntryMedia => Set<ContextEntryMedia>();
+    public DbSet<Persona> Personas => Set<Persona>();
 
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
@@ -52,6 +56,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasConversion(MapConverter(EnumMaps.MessageDirection));
         b.Entity<Message>().Property(x => x.Origin)
             .HasConversion(MapConverter(EnumMaps.MessageOrigin));
+        b.Entity<MediaAsset>().Property(x => x.Type)
+            .HasConversion(MapConverter(EnumMaps.MediaType));
+        b.Entity<ContextEntry>().Property(x => x.Type)
+            .HasConversion(MapConverter(EnumMaps.ContextEntryType));
+        b.Entity<ContextEntry>().Property(x => x.NextAction)
+            .HasConversion(MapConverter(EnumMaps.NextAction));
 
         // ── Índices y restricciones (espejan las migraciones de Laravel) ──
         b.Entity<City>().HasIndex(x => x.Name).IsUnique();
@@ -79,6 +89,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // Historial de un prospecto en orden cronológico (GET /api/prospects/{id}/messages).
         b.Entity<Message>().HasIndex(x => new { x.ProspectId, x.CreatedAt });
+
+        // Un solo agente activo por número de WhatsApp. Filtrado por `active` para
+        // que las personas apagadas —las versiones anteriores del estilo, que
+        // conviene conservar— no impidan crear la que va a estar en uso.
+        b.Entity<Persona>().HasIndex(x => x.PhoneNumberId)
+            .IsUnique()
+            .HasFilter("active");
+
+        // El agente pide todo el contenido encendido en cada mensaje entrante.
+        b.Entity<ContextEntry>().HasIndex(x => new { x.Active, x.Type });
 
         // Relación 1:1 Person <-> WorkerDetail.
         b.Entity<WorkerDetail>().HasIndex(x => x.PersonId).IsUnique();
@@ -123,6 +143,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<Message>().HasOne(m => m.Prospect).WithMany(p => p.Messages)
             .HasForeignKey(m => m.ProspectId).OnDelete(DeleteBehavior.Cascade);
+        // Borrar un archivo de la galería no borra el mensaje que lo mandó.
+        b.Entity<Message>().HasOne(m => m.MediaAsset).WithMany(a => a.Messages)
+            .HasForeignKey(m => m.MediaAssetId).OnDelete(DeleteBehavior.SetNull);
+
+        b.Entity<ContextEntry>().HasOne(c => c.RestrictedZone).WithMany()
+            .HasForeignKey(c => c.RestrictedZoneId).OnDelete(DeleteBehavior.SetNull);
+        b.Entity<ContextEntry>().HasOne(c => c.HandoffToUser).WithMany()
+            .HasForeignKey(c => c.HandoffToUserId).OnDelete(DeleteBehavior.SetNull);
+
+        // Unión N:M ContextEntry <-> MediaAsset, con el mismo patrón que user_roles.
+        b.Entity<ContextEntryMedia>().ToTable("context_entry_media")
+            .HasKey(x => new { x.ContextEntryId, x.MediaAssetId });
+        b.Entity<ContextEntryMedia>().HasOne(x => x.ContextEntry).WithMany(c => c.Media)
+            .HasForeignKey(x => x.ContextEntryId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<ContextEntryMedia>().HasOne(x => x.MediaAsset).WithMany(a => a.ContextEntries)
+            .HasForeignKey(x => x.MediaAssetId).OnDelete(DeleteBehavior.Cascade);
+
+        // Si se borra el usuario, se va su persona: sin a quién representar no tiene sentido.
+        b.Entity<Persona>().HasOne(p => p.User).WithMany()
+            .HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<TrialClass>().HasOne(t => t.Prospect).WithMany(p => p.TrialClasses)
             .HasForeignKey(t => t.ProspectId).OnDelete(DeleteBehavior.Cascade);

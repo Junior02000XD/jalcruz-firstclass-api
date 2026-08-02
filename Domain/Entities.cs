@@ -223,6 +223,117 @@ public class Reminder : BaseEntity
 }
 
 /// <summary>
+/// Archivo que la IA puede mandar por WhatsApp (foto de promoción, audio de
+/// bienvenida). Vive en Cloudflare R2; acá sólo se guarda cómo alcanzarlo.
+/// </summary>
+public class MediaAsset : BaseEntity
+{
+    public MediaType Type { get; set; }
+
+    /// <summary>URL pública del archivo. Meta la descarga desde sus servidores al enviarlo.</summary>
+    public string UrlR2 { get; set; } = null!;
+
+    /// <summary>
+    /// Clave del objeto dentro del bucket. Se guarda aparte de la URL porque es
+    /// lo que necesita el borrado en R2: derivarla de la URL se rompe apenas
+    /// cambia el dominio público.
+    /// </summary>
+    public string ObjectKey { get; set; } = null!;
+
+    /// <summary>Nombre corto con el que se lo reconoce en la galería del panel.</summary>
+    public string Label { get; set; } = null!;
+
+    /// <summary>
+    /// Qué dice o qué muestra el archivo, cargado a mano. Es lo único que la IA
+    /// "sabe" de él: decide si mandar un audio leyendo esto, nunca abriendo el
+    /// archivo en tiempo de respuesta.
+    /// </summary>
+    public string? Transcript { get; set; }
+
+    [JsonIgnore] public ICollection<ContextEntryMedia> ContextEntries { get; set; } = new List<ContextEntryMedia>();
+    [JsonIgnore] public ICollection<Message> Messages { get; set; } = new List<Message>();
+}
+
+/// <summary>
+/// Contenido de negocio que los dueños cargan desde el panel y que el agente lee
+/// entero en cada mensaje para armar el prompt: preguntas frecuentes, reglas,
+/// promociones y flujos del embudo.
+///
+/// Una sola tabla con los campos específicos de cada tipo en nullables. Separarla
+/// en cuatro obligaría al endpoint del agente a cuatro consultas y cuatro formas
+/// distintas, cuando lo que necesita es una lista uniforme.
+/// </summary>
+public class ContextEntry : BaseEntity
+{
+    public ContextEntryType Type { get; set; }
+    public string Title { get; set; } = null!;
+    public string Content { get; set; } = null!;
+
+    /// <summary>Interruptor del panel: apagar una entrada la saca del prompt sin borrarla.</summary>
+    public bool Active { get; set; } = true;
+
+    // ── Sólo para Type = Promotion ──
+
+    /// <summary>Última fecha en que la promoción sigue vigente. El endpoint del agente filtra las vencidas.</summary>
+    public DateOnly? ValidUntil { get; set; }
+
+    /// <summary>
+    /// Zona a la que se limita la promoción. Viaja igual en la respuesta del
+    /// agente: la restricción la aplica la IA conversando, porque cuando llega
+    /// el primer mensaje todavía no se sabe de qué zona es el prospecto.
+    /// </summary>
+    public int? RestrictedZoneId { get; set; }
+    public Zone? RestrictedZone { get; set; }
+
+    public string? ConditionsText { get; set; }
+
+    // ── Sólo para Type = Flow ──
+
+    public NextAction? NextAction { get; set; }
+
+    /// <summary>A quién derivarle la conversación cuando el flujo termina en "derivar".</summary>
+    public int? HandoffToUserId { get; set; }
+    public User? HandoffToUser { get; set; }
+
+    public ICollection<ContextEntryMedia> Media { get; set; } = new List<ContextEntryMedia>();
+}
+
+/// <summary>
+/// Unión N:M: un archivo sirve para varias entradas (la misma foto en dos
+/// promociones) y una entrada puede llevar varios archivos.
+/// </summary>
+public class ContextEntryMedia
+{
+    public int ContextEntryId { get; set; }
+    public ContextEntry ContextEntry { get; set; } = null!;
+    public int MediaAssetId { get; set; }
+    public MediaAsset MediaAsset { get; set; } = null!;
+}
+
+/// <summary>
+/// Voz de la IA en un número de WhatsApp. OJO: no confundir con <see cref="Person"/>,
+/// que es una persona real del CRM; esto es el papel que la IA representa.
+///
+/// Hay una por número (`PhoneNumberId` de la Cloud API), lo que permite que dos
+/// números respondan con estilos distintos y que se pause uno sin tocar el otro.
+/// </summary>
+public class Persona : BaseEntity
+{
+    /// <summary>Persona real a la que representa; también el destino natural de una derivación.</summary>
+    public int UserId { get; set; }
+    public User User { get; set; } = null!;
+
+    /// <summary>Id del número en la Cloud API de Meta (no el número en sí).</summary>
+    public string PhoneNumberId { get; set; } = null!;
+
+    /// <summary>Cómo escribe: tono, tratamiento, muletillas, qué nunca decir.</summary>
+    public string StyleGuide { get; set; } = null!;
+
+    /// <summary>Apagarla deja el número sin agente. El endpoint del agente responde 404 y n8n lo lee como "número pausado".</summary>
+    public bool Active { get; set; } = true;
+}
+
+/// <summary>
 /// Historial de chat de WhatsApp de un prospecto. Es el contexto que lee el
 /// agente de IA antes de responder y el registro de lo que ya se contestó.
 /// </summary>
@@ -243,11 +354,9 @@ public class Message : BaseEntity
 
     public string Content { get; set; } = null!;
 
-    /// <summary>
-    /// Id del adjunto una vez guardado. Sin FK a propósito: la entidad
-    /// MediaAsset llega en la Fase B y todavía no existe.
-    /// </summary>
+    /// <summary>Adjunto del mensaje. Si se borra el archivo, el mensaje queda con el texto.</summary>
     public int? MediaAssetId { get; set; }
+    public MediaAsset? MediaAsset { get; set; }
 
     /// <summary>URL temporal del adjunto en los servidores de Meta (caduca).</summary>
     public string? WhatsappMediaUrl { get; set; }

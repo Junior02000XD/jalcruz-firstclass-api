@@ -126,6 +126,58 @@ public record MessageInput(
     string? WhatsappMediaUrl,
     string? WhatsappMessageId);
 
+// ───────────── Fase B: contenido de negocio para el agente ─────────────
+
+// Sólo los metadatos: el archivo en sí se sube por multipart y no se reemplaza
+// (para cambiarlo se sube otro y se borra el viejo).
+public record MediaAssetInput([Required] string Label, string? Transcript);
+
+public record ContextEntryInput(
+    [Required] string Type,
+    [Required] string Title,
+    [Required] string Content,
+    bool? Active,
+    // Sólo promoción
+    DateOnly? ValidUntil,
+    int? RestrictedZoneId,
+    string? ConditionsText,
+    // Sólo flujo
+    string? NextAction,
+    int? HandoffToUserId,
+    // Archivos asociados; la lista reemplaza a la anterior por completo
+    List<int>? MediaAssetIds);
+
+public record PersonaInput(
+    [Required] int UserId,
+    [Required] string PhoneNumberId,
+    [Required] string StyleGuide,
+    bool? Active);
+
+// ── Respuesta de GET /api/agent-context/{phoneNumberId} ──
+// DTOs propios y no las entidades: el agente necesita una forma estable y sin
+// timestamps, porque el mismo contenido tiene que producir la MISMA respuesta
+// byte a byte entre llamadas (requisito del prompt caching de Claude).
+
+public record AgentMediaDto(int Id, string Type, string UrlR2, string Label, string? Transcript);
+
+public record AgentContextEntryDto(
+    int Id,
+    string Type,
+    string Title,
+    string Content,
+    DateOnly? ValidUntil,
+    int? RestrictedZoneId,
+    string? RestrictedZoneName,
+    string? ConditionsText,
+    string? NextAction,
+    int? HandoffToUserId,
+    string? HandoffToUserName,
+    IReadOnlyList<AgentMediaDto> Media);
+
+public record AgentPersonaDto(int Id, string PhoneNumberId, string StyleGuide, int UserId, string UserName);
+
+public record AgentContextResponse(AgentPersonaDto Persona, IReadOnlyList<AgentContextEntryDto> Entries);
+
 public record EnrollmentInput(
     [Required] int ProspectId,
     [Required] int ProductId,
