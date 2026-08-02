@@ -1,5 +1,14 @@
 # Migración de datos: Laravel (antiguo) → ASP.NET Core API (nuevo)
 
+> ## ⚠️ OBSOLETO — no se sigue este procedimiento
+>
+> Se decidió con los interesados que **no se migra ningún dato**, ni del CRM ni
+> de RRHH. El recambio es un proyecto nuevo de Railway con base vacía, poblada
+> sólo por migraciones + seeder: ver **[RECAMBIO-RAILWAY.md](RECAMBIO-RAILWAY.md)**.
+>
+> Se conserva sólo como referencia del mapeo entre el esquema de Laravel y el de
+> EF Core, por si alguna vez hace falta leer datos viejos.
+
 La BD Postgres actual (creada por las migraciones de Laravel) ya tiene información.
 El esquema nuevo de EF Core usa **los mismos nombres de tabla y columna en
 `snake_case`** y **los mismos valores de enum** (`asistio`, `inscrito`, `bueno`…),

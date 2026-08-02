@@ -50,7 +50,14 @@ Resto bajo `Authorization: Bearer <token>` y rol correspondiente.
 | `payrolls/{id}/export` | HR · Super | Descarga `.xlsx` |
 | `reports/payroll/{id}` | HR · Super | Total a pagar (incluye `extra_amount`) |
 | `campaigns`, `prospects`, `trial-classes`, `teachers` | CRM · Super | Módulo First Class |
+| `reminders`, `messages` | CRM · Super | Seguimientos e historial de chat |
 | `reports/funnel`, `reports/marketing-roi` | CRM · Super | Embudo y ROI |
+
+Los que consume el agente de WhatsApp en n8n — con sus reglas de idempotencia,
+que no son obvias — están en **[docs/WHATSAPP-CRM.md](docs/WHATSAPP-CRM.md)**:
+`GET prospects/by-phone/{numero}`, `POST prospects/quick`,
+`PATCH prospects/{id}/status`, `PATCH prospects/{id}/assignment`,
+`POST messages` y `GET prospects/{id}/messages`.
 
 > **Mejoras frente al Laravel original:** se corrigió el bug de `marketing-roi`
 > (comparaba `'Inscrito'` con mayúscula y siempre daba 0 inscritos) y el
@@ -103,7 +110,13 @@ commit, fácil de revertir. El CLI (`railway up`/`railway logs`) queda para debu
    - `Jwt__Key` (clave nueva y larga), `Jwt__Issuer`, `Jwt__Audience`
    - `Cors__AllowedOrigins` → tu dominio de Cloudflare Pages
    - `Seed__AdminEmail`, `Seed__AdminPassword`
+   - `Seed__CrmUserName`, `Seed__CrmUserEmail`, `Seed__CrmUserPassword` → cuenta
+     que recibe los hand-off de WhatsApp; sin las dos últimas no se crea
 5. Deploy. La API migra y siembra sola al arrancar. Healthcheck: `GET /health`.
+
+El procedimiento completo del recambio (proyecto nuevo, verificación, usuario de
+servicio para n8n, baja del viejo) está en
+**[docs/RECAMBIO-RAILWAY.md](docs/RECAMBIO-RAILWAY.md)**.
 
 ### Conectar el frontend
 
@@ -111,9 +124,11 @@ En `jalcruz-firstclass-web`, cambia `VITE_API_URL` al nuevo dominio de Railway y
 redeploya en Cloudflare. Como el contrato JSON es idéntico, no hay más cambios.
 Para volver atrás, apunta `VITE_API_URL` de vuelta al Laravel anterior.
 
-## Migración de la base de datos existente
+## Base de datos: se arranca vacía
 
-La BD actual ya tiene datos. El esquema nuevo usa los mismos nombres de tabla y
-columna en `snake_case`, así que la migración es mayormente directa.
-Ver **[docs/MIGRACION_DATOS.md](docs/MIGRACION_DATOS.md)** para el procedimiento
-tabla por tabla y las diferencias a tener en cuenta (roles/usuarios, timestamps).
+**No se migra ningún dato** del sistema anterior — decisión tomada con los
+interesados. El proyecto nuevo nace con una base vacía que llenan las
+migraciones y el seeder: ver **[docs/RECAMBIO-RAILWAY.md](docs/RECAMBIO-RAILWAY.md)**.
+
+`docs/MIGRACION_DATOS.md` quedó obsoleto por esa decisión; se conserva sólo como
+referencia del mapeo entre el esquema de Laravel y el de EF Core.
