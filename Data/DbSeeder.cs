@@ -18,6 +18,7 @@ public static class DbSeeder
 
         await SeedSuperAdminAsync(db, config, logger);
         await SeedCrmUserAsync(db, config, logger);
+        await SeedAgentAccountAsync(db, config, logger);
     }
 
     /// <summary>Super Admin inicial, sólo si no existe ningún usuario todavía.</summary>
@@ -58,13 +59,43 @@ public static class DbSeeder
         logger.LogInformation("Usuario de CRM creado: {Email}", email);
     }
 
-    private static async Task CreateUserAsync(AppDbContext db, string name, string email, string password, string roleName)
+    /// <summary>
+    /// Cuenta de servicio del agente de WhatsApp (la que usa n8n). Se crea con rol
+    /// CRM Admin y SIN contraseña utilizable: se hashea un secreto aleatorio de 32
+    /// bytes que se descarta en el acto, así que no existe en ningún lado un valor
+    /// que pase por /api/login. Su único acceso es /api/service-token.
+    ///
+    /// A diferencia de las otras dos cuentas no necesita ninguna variable de
+    /// entorno con secretos, justamente porque no hay secreto que configurar. El
+    /// email es sólo un identificador; se puede cambiar con Seed:AgentUserEmail.
+    ///
+    /// Es idempotente por email, así que un redeploy no la duplica ni la pisa.
+    /// </summary>
+    private static async Task SeedAgentAccountAsync(AppDbContext db, IConfiguration config, ILogger logger)
+    {
+        var email = config["Seed:AgentUserEmail"] ?? "agente-whatsapp@firstclass.local";
+        var name = config["Seed:AgentUserName"] ?? "Agente WhatsApp (n8n)";
+
+        if (await db.Users.AnyAsync(u => u.Email == email))
+            return;
+
+        await CreateUserAsync(db, name, email, RandomPassword(), Roles.CrmAdmin, isServiceAccount: true);
+        logger.LogInformation("Cuenta de servicio del agente creada: {Email} (sin contraseña utilizable)", email);
+    }
+
+    /// <summary>Secreto de un solo uso: se hashea y se pierde. Nadie lo ve nunca.</summary>
+    private static string RandomPassword()
+        => Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+
+    private static async Task CreateUserAsync(
+        AppDbContext db, string name, string email, string password, string roleName, bool isServiceAccount = false)
     {
         var user = new User
         {
             Name = name,
             Email = email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            IsServiceAccount = isServiceAccount,
         };
         db.Users.Add(user);
         await db.SaveChangesAsync();

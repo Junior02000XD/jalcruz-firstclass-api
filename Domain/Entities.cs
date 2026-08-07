@@ -390,6 +390,21 @@ public class User : BaseEntity
     public string Name { get; set; } = null!;
     public string Email { get; set; } = null!;
     [JsonIgnore] public string PasswordHash { get; set; } = null!;
+
+    /// <summary>
+    /// Cuenta de automatización (hoy: el agente de WhatsApp en n8n), no una persona.
+    ///
+    /// Existe para que la cuenta NO pueda entrar por /api/login: su hash de
+    /// contraseña es de un secreto aleatorio que se descarta al crearla, así que
+    /// nadie —ni siquiera Julio— puede iniciar sesión con ella. Su único acceso
+    /// es un token emitido por /api/service-token, que pide ser Super Admin.
+    ///
+    /// El motivo de fondo: guardar email+contraseña de un usuario en n8n abre la
+    /// cuenta entera (y podría cambiar su propia contraseña); un token abre sólo
+    /// lo que el rol permite y se revoca sin tocar a nadie más.
+    /// </summary>
+    public bool IsServiceAccount { get; set; }
+
     [JsonIgnore] public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 }
 

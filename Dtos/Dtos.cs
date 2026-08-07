@@ -19,6 +19,12 @@ public record LoginResponse(string Message, string AccessToken, string TokenType
 
 public record AssignRolesRequest([Required] List<string> Roles);
 
+/// <summary>
+/// Cuerpo opcional de /api/service-token. Con una sola cuenta de servicio no hace
+/// falta mandar nada; el email sólo es necesario si algún día hay varias.
+/// </summary>
+public record ServiceTokenRequest(string? Email);
+
 // ───────────── Núcleo compartido ─────────────
 
 public record CityInput([Required] string Name);

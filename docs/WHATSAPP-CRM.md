@@ -8,6 +8,52 @@ de n8n necesita rol **CRM Admin**.
 El contrato JSON es el de siempre: claves en `snake_case` y valores de enum en
 español.
 
+## Cómo se autentica n8n: cuenta de servicio y token largo
+
+n8n **no inicia sesión con email y contraseña**. Hay una cuenta de servicio que
+no puede iniciar sesión de ninguna manera, y un endpoint que le emite un token.
+
+**La cuenta** (`agente-whatsapp@firstclass.local`, rol *CRM Admin*) la crea sola
+`DbSeeder` al arrancar, sin ninguna variable con secretos: su hash de contraseña
+es de 32 bytes aleatorios que se descartan en el acto, así que no existe un valor
+que pase por `/api/login`. Además `IsServiceAccount` la rechaza ahí de forma
+explícita, para que la garantía no dependa de cómo se creó la fila — si alguien
+le pone una contraseña a mano en la base, sigue sin poder entrar.
+
+Cambiar el nombre o el identificador: `Seed:AgentUserEmail`, `Seed:AgentUserName`.
+Es idempotente por email, así que un redeploy no la duplica.
+
+**El token:**
+
+```
+POST /api/service-token          (sólo Super Admin)
+Authorization: Bearer <token del Super Admin>
+Body: vacío, o {"email": "..."} si algún día hay más de una cuenta de servicio
+```
+
+Devuelve `access_token`, `token_type` y `expires_at`. Es el **mismo** JWT de
+siempre —mismos claims, mismos roles, misma firma, mismo middleware de
+validación—; lo único distinto es la expiración: `Jwt:ServiceTokenDays`, 10 años
+por defecto. **El login normal de las personas sigue en 12 h y no cambió.**
+
+Se eligió no inventar un segundo mecanismo de autenticación justamente para no
+tener dos superficies que auditar.
+
+### Por qué un token y no la contraseña de un usuario
+
+Guardar email + contraseña en n8n entrega la cuenta entera: quien los tenga puede
+entrar por el frontend y cambiar esa misma contraseña para quedarse adentro. Y es
+una credencial más viajando en cada respaldo del volumen de n8n. El token sólo
+alcanza lo que el rol permite y no sirve para iniciar sesión.
+
+### ⚠️ Revocar un token exige rotar `Jwt:Key`
+
+Al ser JWT sin estado, no hay forma de invalidar uno ya emitido salvo cambiar la
+clave de firma — y eso **cierra la sesión de todos los usuarios a la vez**. Se
+aceptó ese costo en lugar de mantener una lista de revocación que habría que
+consultar en cada petición. Si el token se filtra: rotar `Jwt:Key` en Railway,
+volver a emitirlo y cargarlo en n8n; todos vuelven a iniciar sesión una vez.
+
 ## El problema que resuelven estos endpoints
 
 Los mensajes llegan por webhooks de Meta, y Meta:
