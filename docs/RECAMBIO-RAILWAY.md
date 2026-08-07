@@ -42,7 +42,8 @@ Enlazar el Postgres al servicio de la API para que aparezca `DATABASE_URL`.
 | `Jwt__Key` | **clave nueva, ≥32 caracteres** | No reutilizar la del proyecto viejo |
 | `Jwt__Issuer` | `jalcruz-firstclass-api` | |
 | `Jwt__Audience` | `jalcruz-firstclass-web` | |
-| `Jwt__ExpiryHours` | `12` | |
+| `Jwt__ExpiryHours` | `12` | Login normal de las personas. No cambiarlo |
+| `Jwt__ServiceTokenDays` | `3650` | Opcional (ése es el default). Vida del token de la cuenta de servicio de n8n |
 | `Cors__AllowedOrigins` | dominio del frontend | Separados por coma. Sin esto el panel no puede llamar a la API |
 | `Seed__AdminEmail` | correo del Super Admin | |
 | `Seed__AdminPassword` | **contraseña fuerte** | Cambiarla después del primer login |
@@ -131,24 +132,41 @@ El agente necesita su **propia cuenta**, distinta de la de Susanne: si n8n
 entrara con la de ella, no se podría distinguir lo que hace el bot de lo que
 hace la persona, y el `assigned_to_user_id` del hand-off perdería sentido.
 
-No hay endpoint de alta directa; son dos llamadas:
+**Ya no hay que crearla a mano** (esto cambió el 2026-08-07). El seeder la crea
+sola al arrancar: `agente-whatsapp@firstclass.local`, rol *CRM Admin*, **sin
+contraseña utilizable** — se hashean 32 bytes aleatorios que se descartan, así
+que no existe ningún valor que pase por `/api/login`, y además la cuenta se
+rechaza ahí de forma explícita por `IsServiceAccount`.
+
+Lo único que hay que hacer es pedirle su token, una sola vez:
 
 ```bash
-# 1. Crear el usuario (requiere el token del Super Admin; queda SIN roles)
-curl -s -X POST $API/api/register -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Agente n8n","email":"n8n@firstclass...","password":"<clave larga>"}'
-
-# 2. Asignarle el rol, como Super Admin
-curl -s -X POST $API/api/users/<id>/roles -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' -d '{"roles":["CRM Admin"]}'
+curl -s -X POST $API/api/service-token -H "Authorization: Bearer $TOKEN"
 ```
 
-Después, cargar ese correo y contraseña en las credenciales de n8n.
+Devuelve `access_token` (JWT de 10 años, `Jwt__ServiceTokenDays`), `token_type` y
+`expires_at`. **Guardalo en ese momento: no se puede volver a consultar** — se
+puede emitir otro, eso sí.
 
-> `POST /api/register` **ya no es público**: exige el token del Super Admin, así
-> que el `$TOKEN` del paso 4 tiene que seguir vigente. En el panel, la pantalla
-> de alta quedó en `/register` y sólo la ve el Super Admin.
+Ese valor va en n8n, en la credencial *HTTP Header Auth* llamada
+`CRM First Class (jalcruz-firstclass-api)`, campo **Value**, como
+`Bearer <access_token>`. El campo *Name* ya dice `Authorization` y no se toca.
+
+Comprobarlo antes de cablear nada:
+
+```bash
+curl -s $API/api/me -H "Authorization: Bearer <access_token>"
+# tiene que traer "roles":["CRM Admin"]
+```
+
+**Por qué un token y no email + contraseña:** la contraseña abre la cuenta
+entera, y quien la tenga puede entrar por el panel y cambiarla para quedarse
+adentro. Además el volumen de n8n se respalda a diario, o sea que una contraseña
+ahí se multiplica por siete copias.
+
+> ⚠️ **Revocar el token exige rotar `Jwt__Key`**, y eso cierra la sesión de todos
+> los usuarios del CRM a la vez. Es inherente al JWT sin estado; se prefirió eso
+> a mantener una lista de revocación consultada en cada petición.
 
 ## 6. Frontend
 
