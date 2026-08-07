@@ -155,6 +155,20 @@ public class Campaign : BaseEntity
     public string? Url { get; set; }
     public decimal? Budget { get; set; }
     public string? Type { get; set; }                    // "Facebook Ads", "TikTok"
+
+    /// <summary>
+    /// Id del anuncio de Meta (`referral.source_id` del webhook de WhatsApp).
+    ///
+    /// Cuando alguien llega por un anuncio click-to-WhatsApp, el mensaje entrante
+    /// trae ese id. Sin esta columna no hay forma de saber de qué campaña vino, y
+    /// el ROI se pierde justo en los prospectos que costaron dinero.
+    ///
+    /// Único cuando tiene valor (índice filtrado): dos campañas no pueden
+    /// reclamar el mismo anuncio, porque la atribución quedaría a suerte. Varias
+    /// campañas sin anuncio conviven sin problema — los NULL no chocan.
+    /// </summary>
+    public string? AdId { get; set; }
+
     [JsonIgnore] public ICollection<Prospect> Prospects { get; set; } = new List<Prospect>();
 }
 

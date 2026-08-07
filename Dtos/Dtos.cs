@@ -96,7 +96,10 @@ public record CampaignInput(
     string? Description,
     string? Url,
     decimal? Budget,
-    string? Type);
+    string? Type,
+    // Id del anuncio de Meta (referral.source_id). Es lo que ata un prospecto
+    // llegado por click-to-WhatsApp a su campaña.
+    string? AdId);
 
 public record ProspectInput(
     [Required] int PersonId,

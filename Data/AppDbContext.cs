@@ -90,6 +90,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Historial de un prospecto en orden cronológico (GET /api/prospects/{id}/messages).
         b.Entity<Message>().HasIndex(x => new { x.ProspectId, x.CreatedAt });
 
+        // Atribución de campaña por anuncio: el agente busca por el
+        // `referral.source_id` que trae el mensaje entrante. Único cuando tiene
+        // valor —dos campañas no pueden reclamar el mismo anuncio, la atribución
+        // quedaría a suerte— y filtrado para que las campañas sin anuncio, que
+        // son la mayoría, no choquen entre sí por ser todas NULL.
+        b.Entity<Campaign>().HasIndex(x => x.AdId)
+            .IsUnique()
+            .HasFilter("ad_id IS NOT NULL");
+
         // Un solo agente activo por número de WhatsApp. Filtrado por `active` para
         // que las personas apagadas —las versiones anteriores del estilo, que
         // conviene conservar— no impidan crear la que va a estar en uso.
