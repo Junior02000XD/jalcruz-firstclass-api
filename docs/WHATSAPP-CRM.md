@@ -21,14 +21,38 @@ explícita, para que la garantía no dependa de cómo se creó la fila — si al
 le pone una contraseña a mano en la base, sigue sin poder entrar.
 
 Cambiar el nombre o el identificador: `Seed:AgentUserEmail`, `Seed:AgentUserName`.
-Es idempotente por email, así que un redeploy no la duplica.
+Es idempotente por email, así que un redeploy no la duplica. Y si **ya existe
+alguna** cuenta de servicio, el seeder no crea la suya: si no, cada despliegue
+dejaría una cuenta paralela sin uso y dos candidatas para el token.
+
+**Si el bot ya existía como usuario normal**, creado a mano antes de que esto
+existiera, no hay que rehacerlo — borrarlo se llevaría puestos los prospectos que
+tenga asignados. Se lo convierte:
+
+```
+POST   /api/users/{id}/service-account        (sólo Super Admin)
+DELETE /api/users/{id}/service-account        para volver atrás; pide new_password
+```
+
+Al convertirlo deja de poder iniciar sesión y **su contraseña se destruye**, que
+es justamente el punto: la que alguien haya anotado al crear la cuenta deja de
+servir. **No se puede convertir la cuenta propia** — quien lo intentara quedaría
+sin acceso al panel, ni siquiera para deshacerlo.
+
+> ⚠️ Revertir **no invalida los tokens ya emitidos** para esa cuenta: son JWT sin
+> estado. Lo que de verdad limita lo que un token puede hacer es el rol, así que
+> para cortarlo hay que quitarle los roles o rotar `Jwt:Key`.
+
+**Desde el panel:** *Control de Usuarios* (sólo Super Admin) tiene todo esto en
+botones — **Hacer bot**, **Token** y deshacer. El token se muestra una sola vez,
+con botón de copiar y la instrucción de dónde pegarlo en n8n.
 
 **El token:**
 
 ```
 POST /api/service-token          (sólo Super Admin)
 Authorization: Bearer <token del Super Admin>
-Body: vacío, o {"email": "..."} si algún día hay más de una cuenta de servicio
+Body: {"id": 3}  ·  {"email": "..."}  ·  o vacío si hay una sola cuenta
 ```
 
 Devuelve `access_token`, `token_type` y `expires_at`. Es el **mismo** JWT de

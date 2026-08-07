@@ -13,7 +13,13 @@ public record RegisterRequest(
     [Required, EmailAddress] string Email,
     [Required, MinLength(8)] string Password);
 
-public record UserDto(int Id, string Name, string Email, string[] Roles);
+/// <summary>
+/// `IsServiceAccount` viaja al frontend para que la pantalla de usuarios pueda
+/// distinguir a los bots de las personas: una cuenta de servicio no inicia
+/// sesión, así que ofrecerle "cambiar contraseña" o esperar que entre al panel
+/// no tendría sentido.
+/// </summary>
+public record UserDto(int Id, string Name, string Email, string[] Roles, bool IsServiceAccount);
 
 public record LoginResponse(string Message, string AccessToken, string TokenType, UserDto User);
 
@@ -23,7 +29,14 @@ public record AssignRolesRequest([Required] List<string> Roles);
 /// Cuerpo opcional de /api/service-token. Con una sola cuenta de servicio no hace
 /// falta mandar nada; el email sólo es necesario si algún día hay varias.
 /// </summary>
-public record ServiceTokenRequest(string? Email);
+public record ServiceTokenRequest(int? Id, string? Email);
+
+/// <summary>
+/// Cuerpo para devolver una cuenta de servicio al estado de persona. Exige una
+/// contraseña nueva porque al convertirla se destruyó la anterior.
+/// </summary>
+public record RevertirCuentaDeServicioRequest(
+    [Required, MinLength(8)] string NewPassword);
 
 // ───────────── Núcleo compartido ─────────────
 

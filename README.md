@@ -49,6 +49,7 @@ sólo del Super Admin— va con `Authorization: Bearer <token>` y su rol.
 | `people`, `cities`, `zones` | HR · CRM · Super | Núcleo compartido |
 | `users`, `users/{id}/roles` | Super | Gestión de usuarios |
 | `service-token` | Super | Emite el JWT largo del agente de n8n (ver `docs/WHATSAPP-CRM.md`) |
+| `users/{id}/service-account` | Super | Convierte un usuario en cuenta de bot (`POST`) o lo devuelve a persona (`DELETE`) |
 | `companies`, `work-areas`, `payrolls`, `attendances`, `worker-details` | HR · Super | Módulo Jalcruz |
 | `payrolls/{id}/export` | HR · Super | Descarga `.xlsx` |
 | `reports/payroll/{id}` | HR · Super | Total a pagar (incluye `extra_amount`) |

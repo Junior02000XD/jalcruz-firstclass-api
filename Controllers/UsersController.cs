@@ -26,7 +26,7 @@ public class UsersController(AppDbContext db) : ControllerBase
             .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
             .OrderBy(u => u.Name)
             .Select(u => new UserDto(u.Id, u.Name, u.Email,
-                u.UserRoles.Select(ur => ur.Role.Name).ToArray()))
+                u.UserRoles.Select(ur => ur.Role.Name).ToArray(), u.IsServiceAccount))
             .ToListAsync();
         return Ok(users);
     }
@@ -70,6 +70,85 @@ public class UsersController(AppDbContext db) : ControllerBase
         await db.SaveChangesAsync();
 
         return Ok(new { message = "Roles actualizados.", roles = roles.Select(r => r.Name) });
+    }
+
+    /// <summary>
+    /// Convierte un usuario existente en cuenta de servicio (un bot, no una
+    /// persona). Existe porque la cuenta del agente puede haber sido creada a
+    /// mano antes de que existiera este mecanismo: sin esto habría que borrarla y
+    /// rehacerla, perdiendo los prospectos que tenga asignados.
+    ///
+    /// Dos efectos, los dos deliberados:
+    ///  1. Deja de poder iniciar sesión (lo bloquea /api/login por la bandera).
+    ///  2. **Se destruye su contraseña**, reemplazándola por un aleatorio que no
+    ///     se guarda en ningún lado. Así la contraseña que alguien haya anotado
+    ///     cuando creó la cuenta deja de servir para algo — que es justamente el
+    ///     motivo de pasar a tokens.
+    ///
+    /// Es reversible con DELETE, que exige fijar una contraseña nueva.
+    /// </summary>
+    [HttpPost("{userId:int}/service-account")]
+    [Authorize(Roles = Roles.SuperAdmin)]
+    public async Task<IActionResult> ConvertirEnCuentaDeServicio(int userId)
+    {
+        var user = await db.Users
+            .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+        if (user is null) return NotFound(new { message = "Usuario no encontrado." });
+
+        // Convertirse a uno mismo sería encerrarse afuera: el que ejecuta esto es
+        // Super Admin y perdería el acceso al panel, incluso para revertirlo.
+        var sub = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (int.TryParse(sub, out var propio) && propio == userId)
+            return BadRequest(new { message = "No podés convertir tu propia cuenta: quedarías sin acceso al panel." });
+
+        if (user.IsServiceAccount)
+            return BadRequest(new { message = "Esa cuenta ya es de servicio." });
+
+        user.IsServiceAccount = true;
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(
+            Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
+        await db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = $"{user.Email} pasó a ser cuenta de servicio: ya no puede iniciar sesión y su contraseña anterior dejó de existir.",
+            user = new UserDto(user.Id, user.Name, user.Email,
+                user.UserRoles.Select(ur => ur.Role.Name).ToArray(), user.IsServiceAccount),
+        });
+    }
+
+    /// <summary>
+    /// Devuelve una cuenta de servicio al estado de persona. Pide contraseña
+    /// nueva porque la anterior se destruyó al convertirla.
+    ///
+    /// ⚠️ Los tokens ya emitidos para esa cuenta **siguen siendo válidos**: son
+    /// JWT sin estado. Para cortarlos hay que rotar `Jwt:Key`, o quitarle los
+    /// roles, que es lo que de verdad limita lo que el token puede hacer.
+    /// </summary>
+    [HttpDelete("{userId:int}/service-account")]
+    [Authorize(Roles = Roles.SuperAdmin)]
+    public async Task<IActionResult> RevertirCuentaDeServicio(int userId, RevertirCuentaDeServicioRequest req)
+    {
+        var user = await db.Users
+            .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+        if (user is null) return NotFound(new { message = "Usuario no encontrado." });
+
+        if (!user.IsServiceAccount)
+            return BadRequest(new { message = "Esa cuenta no es de servicio." });
+
+        user.IsServiceAccount = false;
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
+        await db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = $"{user.Email} vuelve a ser una cuenta de persona y ya puede iniciar sesión. " +
+                      "Ojo: los tokens de servicio que se le hayan emitido siguen valiendo.",
+            user = new UserDto(user.Id, user.Name, user.Email,
+                user.UserRoles.Select(ur => ur.Role.Name).ToArray(), user.IsServiceAccount),
+        });
     }
 
     [HttpDelete("{userId:int}")]

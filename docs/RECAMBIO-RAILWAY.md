@@ -138,7 +138,13 @@ contraseña utilizable** — se hashean 32 bytes aleatorios que se descartan, as
 que no existe ningún valor que pase por `/api/login`, y además la cuenta se
 rechaza ahí de forma explícita por `IsServiceAccount`.
 
-Lo único que hay que hacer es pedirle su token, una sola vez:
+Si preferís usar **una cuenta de bot que ya tenías creada**, no hace falta
+rehacerla: en el panel, *Control de Usuarios* → botón **Hacer bot**. Deja de
+poder iniciar sesión y su contraseña se destruye. Con eso, el seeder ya no crea
+la suya en los despliegues siguientes.
+
+Lo único que hay que hacer es pedirle su token, una sola vez — **desde el panel**
+con el botón **Token**, o a mano:
 
 ```bash
 curl -s -X POST $API/api/service-token -H "Authorization: Bearer $TOKEN"

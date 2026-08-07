@@ -41,7 +41,7 @@ public class AuthController(AppDbContext db, JwtTokenService jwt, JwtOptions jwt
             "Inicio de sesión exitoso",
             token,
             "Bearer",
-            new UserDto(user.Id, user.Name, user.Email, roles)));
+            new UserDto(user.Id, user.Name, user.Email, roles, user.IsServiceAccount)));
     }
 
     /// <summary>
@@ -102,21 +102,29 @@ public class AuthController(AppDbContext db, JwtTokenService jwt, JwtOptions jwt
             .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
             .Where(u => u.IsServiceAccount);
 
-        if (!string.IsNullOrWhiteSpace(req?.Email))
+        // El id es lo que manda el panel; el email queda para pedirlo a mano con
+        // curl, donde es más cómodo escribir un correo que averiguar un id.
+        if (req?.Id is int id)
+            candidatos = candidatos.Where(u => u.Id == id);
+        else if (!string.IsNullOrWhiteSpace(req?.Email))
             candidatos = candidatos.Where(u => u.Email == req.Email);
 
         var cuentas = await candidatos.OrderBy(u => u.Id).ToListAsync();
 
         if (cuentas.Count == 0)
-            return NotFound(new { message = "No hay ninguna cuenta de servicio. Se crea al arrancar la API con Seed:AgentUserEmail definida." });
+            return NotFound(new
+            {
+                message = "No hay ninguna cuenta de servicio con esos datos. " +
+                          "Convertí un usuario existente desde Control de Usuarios, o dejá que el seeder cree la suya.",
+            });
 
         // Con más de una cuenta de servicio hay que decir cuál: elegir la primera
         // en silencio emitiría un token con permisos que quizá no son los pedidos.
         if (cuentas.Count > 1)
             return BadRequest(new
             {
-                message = "Hay más de una cuenta de servicio: indicá cuál en el campo email.",
-                cuentas = cuentas.Select(u => u.Email),
+                message = "Hay más de una cuenta de servicio: indicá cuál.",
+                cuentas = cuentas.Select(u => new { u.Id, u.Email }),
             });
 
         var user = cuentas[0];
@@ -133,7 +141,7 @@ public class AuthController(AppDbContext db, JwtTokenService jwt, JwtOptions jwt
             access_token = token,
             token_type = "Bearer",
             expires_at = DateTime.UtcNow.AddDays(jwtOptions.ServiceTokenDays),
-            user = new UserDto(user.Id, user.Name, user.Email, roles),
+            user = new UserDto(user.Id, user.Name, user.Email, roles, user.IsServiceAccount),
         });
     }
 
@@ -164,6 +172,6 @@ public class AuthController(AppDbContext db, JwtTokenService jwt, JwtOptions jwt
         if (user is null) return NotFound();
 
         return Ok(new UserDto(user.Id, user.Name, user.Email,
-            user.UserRoles.Select(ur => ur.Role.Name).ToArray()));
+            user.UserRoles.Select(ur => ur.Role.Name).ToArray(), user.IsServiceAccount));
     }
 }

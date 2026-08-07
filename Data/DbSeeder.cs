@@ -79,6 +79,16 @@ public static class DbSeeder
         if (await db.Users.AnyAsync(u => u.Email == email))
             return;
 
+        // Si ya hay una cuenta de servicio, no se crea otra. Pasa cuando el bot
+        // se había creado a mano y después se lo convirtió desde el panel: sin
+        // esta guarda, cada despliegue agregaría una cuenta paralela sin uso, y
+        // habría dos candidatas a la hora de emitir el token.
+        if (await db.Users.AnyAsync(u => u.IsServiceAccount))
+        {
+            logger.LogInformation("Ya existe una cuenta de servicio: no se crea la del seeder.");
+            return;
+        }
+
         await CreateUserAsync(db, name, email, RandomPassword(), Roles.CrmAdmin, isServiceAccount: true);
         logger.LogInformation("Cuenta de servicio del agente creada: {Email} (sin contraseña utilizable)", email);
     }
