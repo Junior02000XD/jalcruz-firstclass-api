@@ -43,6 +43,12 @@ public class UsersController(AppDbContext db) : ControllerBase
     [Authorize(Roles = $"{Roles.CrmAdmin},{Roles.SuperAdmin}")]
     public async Task<IActionResult> Assignable()
         => Ok(await db.Users
+            // Las cuentas de servicio quedan fuera: derivar una conversación AL
+            // BOT no significa nada —lo que apaga al bot es justamente que haya
+            // alguien asignado— y aparecía en el desplegable invitando al error.
+            // Julio había llegado a llamar a la cuenta "Bot — no derivar acá"
+            // para defenderse de esto desde el nombre.
+            .Where(u => !u.IsServiceAccount)
             .Where(u => u.UserRoles.Any(ur => ur.Role.Name == Roles.CrmAdmin || ur.Role.Name == Roles.SuperAdmin))
             .OrderBy(u => u.Name)
             .Select(u => new { u.Id, u.Name })
