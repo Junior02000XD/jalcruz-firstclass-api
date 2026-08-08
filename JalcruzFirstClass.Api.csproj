@@ -14,6 +14,21 @@
     <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <!--
+      Microsoft.OpenApi entra solo, como dependencia de Microsoft.AspNetCore.OpenApi,
+      y esa dependencia está anclada a 2.0.0 — que arrastra GHSA-v5pm-xwqc-g5wc:
+      recursión sin control al parsear documentos con referencias circulares, o sea
+      un desbordamiento de pila que tumba el proceso. Está parcheado desde 2.7.5.
+
+      Subir Microsoft.AspNetCore.OpenApi NO alcanza: la 10.0.10 sigue pidiendo
+      2.0.0. La única forma de mover una dependencia transitiva es declararla
+      directo acá, porque NuGet le da prioridad a la referencia más cercana.
+
+      Se queda en la línea 2.x a propósito. La 3.x existe, pero es un cambio de
+      versión mayor contra un paquete que compila el Swagger de esta API: no vale
+      arriesgar eso para cerrar una vulnerabilidad que ya se cierra con 2.7.5.
+    -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
