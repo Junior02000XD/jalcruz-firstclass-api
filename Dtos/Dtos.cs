@@ -161,7 +161,9 @@ public record ContextEntryInput(
     bool? Active,
     // Sólo promoción
     DateOnly? ValidUntil,
-    int? RestrictedZoneId,
+    // Zonas a las que se limita. Null = no la toques (para un PUT que sólo edita
+    // el texto); lista vacía = quitar la restricción, o sea vale para todas.
+    List<int>? RestrictedZoneIds,
     string? ConditionsText,
     // Sólo flujo
     string? NextAction,
@@ -180,6 +182,8 @@ public record PersonaInput(
 // timestamps, porque el mismo contenido tiene que producir la MISMA respuesta
 // byte a byte entre llamadas (requisito del prompt caching de Claude).
 
+public record AgentZoneDto(int Id, string Name);
+
 public record AgentMediaDto(int Id, string Type, string UrlR2, string Label, string? Transcript);
 
 public record AgentContextEntryDto(
@@ -188,8 +192,8 @@ public record AgentContextEntryDto(
     string Title,
     string Content,
     DateOnly? ValidUntil,
-    int? RestrictedZoneId,
-    string? RestrictedZoneName,
+    // Vacía = la promoción vale para todas las zonas.
+    IReadOnlyList<AgentZoneDto> RestrictedZones,
     string? ConditionsText,
     string? NextAction,
     int? HandoffToUserId,

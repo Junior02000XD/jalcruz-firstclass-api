@@ -50,6 +50,9 @@ public class ContextEntriesController(AppDbContext db) : ControllerBase
         db.ContextEntries.Add(entry);
         await db.SaveChangesAsync();
         await SetMediaAsync(entry.Id, input.MediaAssetIds);
+        // Si la ficha no es una promoción, la lista se vacía: una regla con zonas
+        // colgadas sería una restricción invisible que nadie puede ver ni editar.
+        await SetZonesAsync(entry.Id, entry.Type == ContextEntryType.Promotion ? input.RestrictedZoneIds : new List<int>());
 
         return CreatedAtAction(nameof(Show), new { id = entry.Id }, await BaseQuery().FirstAsync(c => c.Id == entry.Id));
     }
@@ -65,6 +68,9 @@ public class ContextEntriesController(AppDbContext db) : ControllerBase
 
         await db.SaveChangesAsync();
         await SetMediaAsync(entry.Id, input.MediaAssetIds);
+        // Si la ficha no es una promoción, la lista se vacía: una regla con zonas
+        // colgadas sería una restricción invisible que nadie puede ver ni editar.
+        await SetZonesAsync(entry.Id, entry.Type == ContextEntryType.Promotion ? input.RestrictedZoneIds : new List<int>());
 
         db.ChangeTracker.Clear();
         return Ok(await BaseQuery().FirstAsync(c => c.Id == id));
@@ -98,7 +104,7 @@ public class ContextEntriesController(AppDbContext db) : ControllerBase
 
     private IQueryable<ContextEntry> BaseQuery() =>
         db.ContextEntries.AsNoTracking()
-            .Include(c => c.RestrictedZone)
+            .Include(c => c.Zones).ThenInclude(z => z.Zone)
             .Include(c => c.HandoffToUser)
             .Include(c => c.Media).ThenInclude(m => m.MediaAsset);
 
@@ -116,8 +122,13 @@ public class ContextEntriesController(AppDbContext db) : ControllerBase
             nextAction = parsed;
         }
 
-        if (input.RestrictedZoneId is int zoneId && !await db.Zones.AnyAsync(z => z.Id == zoneId))
-            return BadRequest(new { message = $"No existe la zona {zoneId}." });
+        if (input.RestrictedZoneIds is { Count: > 0 } pedidas)
+        {
+            var existen = await db.Zones.Where(z => pedidas.Contains(z.Id)).Select(z => z.Id).ToListAsync();
+            var faltan = pedidas.Distinct().Except(existen).ToList();
+            if (faltan.Count > 0)
+                return BadRequest(new { message = $"No existen las zonas: {string.Join(", ", faltan)}." });
+        }
 
         if (input.HandoffToUserId is int userId && !await db.Users.AnyAsync(u => u.Id == userId))
             return BadRequest(new { message = $"No existe el usuario {userId}." });
@@ -131,12 +142,34 @@ public class ContextEntriesController(AppDbContext db) : ControllerBase
         // promoción se convierte en regla, su vencimiento no puede quedar colgado
         // y reapareciendo en el prompt.
         entry.ValidUntil = type == ContextEntryType.Promotion ? input.ValidUntil : null;
-        entry.RestrictedZoneId = type == ContextEntryType.Promotion ? input.RestrictedZoneId : null;
         entry.ConditionsText = type == ContextEntryType.Promotion ? input.ConditionsText : null;
         entry.NextAction = type == ContextEntryType.Flow ? nextAction : null;
         entry.HandoffToUserId = type == ContextEntryType.Flow ? input.HandoffToUserId : null;
 
         return null;
+    }
+
+    /// <summary>
+    /// Reemplaza las zonas a las que se limita la ficha. Mismo criterio que los
+    /// archivos: null = "no la toques"; lista vacía = **vale para todas**, que es
+    /// también lo que se fuerza cuando la ficha deja de ser una promoción.
+    /// </summary>
+    private async Task SetZonesAsync(int entryId, List<int>? zoneIds)
+    {
+        if (zoneIds is null) return;
+
+        var current = await db.ContextEntryZones.Where(z => z.ContextEntryId == entryId).ToListAsync();
+        db.ContextEntryZones.RemoveRange(current);
+
+        // Distinct porque la clave es compuesta: un id repetido en el payload
+        // reventaría con violación de clave primaria.
+        var wanted = zoneIds.Distinct().ToList();
+        var existing = await db.Zones.Where(z => wanted.Contains(z.Id)).Select(z => z.Id).ToListAsync();
+
+        foreach (var zoneId in existing)
+            db.ContextEntryZones.Add(new ContextEntryZone { ContextEntryId = entryId, ZoneId = zoneId });
+
+        await db.SaveChangesAsync();
     }
 
     /// <summary>

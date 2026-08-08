@@ -31,6 +31,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
     public DbSet<ContextEntry> ContextEntries => Set<ContextEntry>();
     public DbSet<ContextEntryMedia> ContextEntryMedia => Set<ContextEntryMedia>();
+    public DbSet<ContextEntryZone> ContextEntryZones => Set<ContextEntryZone>();
     public DbSet<Persona> Personas => Set<Persona>();
 
     public DbSet<User> Users => Set<User>();
@@ -156,8 +157,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Message>().HasOne(m => m.MediaAsset).WithMany(a => a.Messages)
             .HasForeignKey(m => m.MediaAssetId).OnDelete(DeleteBehavior.SetNull);
 
-        b.Entity<ContextEntry>().HasOne(c => c.RestrictedZone).WithMany()
-            .HasForeignKey(c => c.RestrictedZoneId).OnDelete(DeleteBehavior.SetNull);
+
         b.Entity<ContextEntry>().HasOne(c => c.HandoffToUser).WithMany()
             .HasForeignKey(c => c.HandoffToUserId).OnDelete(DeleteBehavior.SetNull);
 
@@ -168,6 +168,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(x => x.ContextEntryId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<ContextEntryMedia>().HasOne(x => x.MediaAsset).WithMany(a => a.ContextEntries)
             .HasForeignKey(x => x.MediaAssetId).OnDelete(DeleteBehavior.Cascade);
+
+        // Unión N:M ContextEntry <-> Zone, mismo patrón que context_entry_media.
+        b.Entity<ContextEntryZone>().ToTable("context_entry_zones")
+            .HasKey(x => new { x.ContextEntryId, x.ZoneId });
+        b.Entity<ContextEntryZone>().HasOne(x => x.ContextEntry).WithMany(c => c.Zones)
+            .HasForeignKey(x => x.ContextEntryId).OnDelete(DeleteBehavior.Cascade);
+        // Cascade y no SetNull: en una tabla de unión no hay "fila sin zona" que
+        // conservar. Borrar la zona quita la restricción de esa promo, que pasa a
+        // valer para todas — el mismo estado que tenía antes de restringirla.
+        b.Entity<ContextEntryZone>().HasOne(x => x.Zone).WithMany(z => z.ContextEntries)
+            .HasForeignKey(x => x.ZoneId).OnDelete(DeleteBehavior.Cascade);
 
         // Si se borra el usuario, se va su persona: sin a quién representar no tiene sentido.
         b.Entity<Persona>().HasOne(p => p.User).WithMany()

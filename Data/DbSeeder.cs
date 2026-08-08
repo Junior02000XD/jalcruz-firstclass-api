@@ -16,9 +16,35 @@ public static class DbSeeder
 
         await db.Database.MigrateAsync();
 
+        await SeedZonesAsync(db, logger);
         await SeedSuperAdminAsync(db, config, logger);
         await SeedCrmUserAsync(db, config, logger);
         await SeedAgentAccountAsync(db, config, logger);
+    }
+
+    /// <summary>
+    /// Zonas reales del instituto. Se siembran porque el desplegable de zonas de
+    /// las promociones estaba vacío y no había forma de llenarlo: la tabla existía
+    /// desde el Laravel original pero nadie la cargó nunca.
+    ///
+    /// Idempotente por nombre, así que un redeploy no las duplica, y agregar más
+    /// desde el panel no las pisa. Si alguien borra una a propósito, vuelve a
+    /// aparecer en el próximo arranque — es el precio de sembrarlas, y para tres
+    /// zonas fijas es el trato correcto.
+    /// </summary>
+    private static async Task SeedZonesAsync(AppDbContext db, ILogger logger)
+    {
+        string[] zonas = ["Montero", "Equipetrol", "Plan 3000"];
+
+        var existentes = await db.Zones.Select(z => z.Name).ToListAsync();
+        var faltantes = zonas.Except(existentes).ToList();
+        if (faltantes.Count == 0) return;
+
+        foreach (var nombre in faltantes)
+            db.Zones.Add(new Zone { Name = nombre });
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("Zonas sembradas: {Zonas}", string.Join(", ", faltantes));
     }
 
     /// <summary>Super Admin inicial, sólo si no existe ningún usuario todavía.</summary>

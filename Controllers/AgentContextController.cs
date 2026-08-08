@@ -48,7 +48,7 @@ public class AgentContextController(AppDbContext db) : ControllerBase
         var today = DateOnly.FromDateTime(DateTime.UtcNow + BoliviaOffset);
 
         var entries = await db.ContextEntries.AsNoTracking()
-            .Include(c => c.RestrictedZone)
+            .Include(c => c.Zones).ThenInclude(z => z.Zone)
             .Include(c => c.HandoffToUser)
             .Include(c => c.Media).ThenInclude(m => m.MediaAsset)
             .Where(c => c.Active)
@@ -69,8 +69,14 @@ public class AgentContextController(AppDbContext db) : ControllerBase
                 c.Title,
                 c.Content,
                 c.ValidUntil,
-                c.RestrictedZoneId,
-                c.RestrictedZone?.Name,
+                // Ordenadas por id: la respuesta de este endpoint tiene que ser
+                // byte a byte idéntica entre llamadas o se invalida el prompt
+                // caching de Claude en cada mensaje. Ordenar por nombre ataría el
+                // orden al texto, que se puede editar desde el panel.
+                c.Zones
+                    .OrderBy(z => z.ZoneId)
+                    .Select(z => new AgentZoneDto(z.Zone.Id, z.Zone.Name))
+                    .ToList(),
                 c.ConditionsText,
                 c.NextAction is null ? null : EnumMaps.NextAction[c.NextAction.Value],
                 c.HandoffToUserId,

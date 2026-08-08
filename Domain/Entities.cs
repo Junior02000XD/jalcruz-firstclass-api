@@ -136,8 +136,9 @@ public class Product : BaseEntity
 
 public class Zone : BaseEntity
 {
-    public string Name { get; set; } = null!;            // Norte, Sur, Plan 3000
+    public string Name { get; set; } = null!;            // Montero, Equipetrol, Plan 3000
     [JsonIgnore] public ICollection<Prospect> Prospects { get; set; } = new List<Prospect>();
+    [JsonIgnore] public ICollection<ContextEntryZone> ContextEntries { get; set; } = new List<ContextEntryZone>();
 }
 
 public class Teacher : BaseEntity
@@ -292,12 +293,17 @@ public class ContextEntry : BaseEntity
     public DateOnly? ValidUntil { get; set; }
 
     /// <summary>
-    /// Zona a la que se limita la promoción. Viaja igual en la respuesta del
-    /// agente: la restricción la aplica la IA conversando, porque cuando llega
-    /// el primer mensaje todavía no se sabe de qué zona es el prospecto.
+    /// Zonas a las que se limita la promoción. **Lista vacía = vale para todas**,
+    /// que es el comportamiento por defecto y el más común.
+    ///
+    /// Antes era un solo `RestrictedZoneId`, y obligaba a cargar la misma promo
+    /// dos veces —una por zona— con el trabajo doble de mantenerlas iguales.
+    ///
+    /// Viaja igual en la respuesta del agente: la restricción la aplica la IA
+    /// conversando, porque cuando llega el primer mensaje todavía no se sabe de
+    /// qué zona es el prospecto.
     /// </summary>
-    public int? RestrictedZoneId { get; set; }
-    public Zone? RestrictedZone { get; set; }
+    public ICollection<ContextEntryZone> Zones { get; set; } = new List<ContextEntryZone>();
 
     public string? ConditionsText { get; set; }
 
@@ -316,6 +322,15 @@ public class ContextEntry : BaseEntity
 /// Unión N:M: un archivo sirve para varias entradas (la misma foto en dos
 /// promociones) y una entrada puede llevar varios archivos.
 /// </summary>
+/// <summary>Unión N:M entre una ficha de contenido y las zonas a las que se limita.</summary>
+public class ContextEntryZone
+{
+    public int ContextEntryId { get; set; }
+    public ContextEntry ContextEntry { get; set; } = null!;
+    public int ZoneId { get; set; }
+    public Zone Zone { get; set; } = null!;
+}
+
 public class ContextEntryMedia
 {
     public int ContextEntryId { get; set; }
