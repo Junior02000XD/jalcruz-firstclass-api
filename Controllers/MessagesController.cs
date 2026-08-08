@@ -122,6 +122,26 @@ public class MessagesController(AppDbContext db) : ControllerBase
         return Ok(await query.OrderBy(m => m.CreatedAt).ThenBy(m => m.Id).ToListAsync());
     }
 
+    /// <summary>
+    /// Borra TODO el historial de un prospecto de una sola vez. Existe porque
+    /// limpiar una conversación de sesenta mensajes desde el panel, de a uno,
+    /// serían sesenta pedidos — y a mitad de camino queda medio historial, que
+    /// es peor que cualquiera de los dos extremos.
+    ///
+    /// El prospecto NO se toca: sigue existiendo con su estado, su zona y quién
+    /// lo atiende. Lo que se va es lo que el agente lee como contexto.
+    /// </summary>
+    [HttpDelete("/api/prospects/{prospectId:int}/messages")]
+    public async Task<IActionResult> DestroyByProspect(int prospectId)
+    {
+        if (!await db.Prospects.AnyAsync(p => p.Id == prospectId)) return NotFound();
+
+        // ExecuteDeleteAsync manda un solo DELETE ... WHERE en vez de traerse
+        // los mensajes a memoria para marcarlos uno por uno.
+        var deleted = await db.Messages.Where(m => m.ProspectId == prospectId).ExecuteDeleteAsync();
+        return Ok(new { deleted });
+    }
+
     private Task<Message?> FindByWamidAsync(string wamid) =>
         db.Messages.AsNoTracking().FirstOrDefaultAsync(m => m.WhatsappMessageId == wamid);
 
