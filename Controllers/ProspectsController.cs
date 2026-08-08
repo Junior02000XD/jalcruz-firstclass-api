@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using System.Text.Json;
 
 namespace JalcruzFirstClass.Api.Controllers;
 
@@ -185,6 +186,79 @@ public class ProspectsController(AppDbContext db) : ControllerBase
         if (!string.IsNullOrWhiteSpace(input.Status))
             prospect.Status = ParseStatus(input.Status);
         await db.SaveChangesAsync();
+        return Ok(prospect);
+    }
+
+    /// <summary>
+    /// Actualización parcial. Mismo criterio que el PATCH de personas y por la misma
+    /// razón: el agente averigua un dato suelto en la charla —la zona, una anotación—
+    /// y tiene que poder guardarlo sin conocer el resto de la ficha. Con el PUT,
+    /// cada campo que no mandara se guardaría como null.
+    ///
+    /// Se recibe el JSON crudo a propósito: con un DTO de campos nullable no hay
+    /// forma de distinguir "no mandé notes" de "borrá notes", y esa diferencia es
+    /// justo la que hace falta.
+    ///
+    /// NO expone status ni assigned_to_user_id: ésos ya tienen su propio PATCH, con
+    /// validación estricta del enum y del usuario. Duplicarlos acá sería una segunda
+    /// puerta con menos controles.
+    /// </summary>
+    [HttpPatch("{id:int}")]
+    public async Task<IActionResult> Patch(int id, [FromBody] JsonElement cambios)
+    {
+        var prospect = await db.Prospects.FindAsync(id);
+        if (prospect is null) return NotFound();
+
+        if (cambios.ValueKind != JsonValueKind.Object)
+            return BadRequest(new { message = "El cuerpo tiene que ser un objeto JSON." });
+
+        // "" y "   " cuentan como null: un campo vaciado significa "no sé el dato",
+        // no "guardá una cadena vacía".
+        bool Texto(string clave, out string? valor)
+        {
+            valor = null;
+            if (!cambios.TryGetProperty(clave, out var v)) return false;
+            if (v.ValueKind == JsonValueKind.Null) return true;
+            if (v.ValueKind != JsonValueKind.String) return false;
+            var s = v.GetString();
+            valor = string.IsNullOrWhiteSpace(s) ? null : s!.Trim();
+            return true;
+        }
+
+        if (Texto("notes", out var notas)) prospect.Notes = notas;
+        if (Texto("address", out var direccion)) prospect.Address = direccion;
+        if (Texto("origin", out var origen)) prospect.Origin = origen;
+
+        if (cambios.TryGetProperty("zone_id", out var zona))
+        {
+            if (zona.ValueKind == JsonValueKind.Null) prospect.ZoneId = null;
+            // El ValueKind se comprueba ANTES: TryGetInt32 sobre un JSON de texto no
+            // devuelve false, lanza — y un tipo mal mandado saldría como 500.
+            else if (zona.ValueKind == JsonValueKind.Number && zona.TryGetInt32(out var zoneId))
+            {
+                if (!await db.Zones.AnyAsync(z => z.Id == zoneId))
+                    return BadRequest(new { message = $"No existe la zona {zoneId}." });
+                prospect.ZoneId = zoneId;
+            }
+            else return BadRequest(new { message = "zone_id tiene que ser un número o null." });
+        }
+
+        if (cambios.TryGetProperty("campaign_id", out var campania))
+        {
+            if (campania.ValueKind == JsonValueKind.Null) prospect.CampaignId = null;
+            else if (campania.ValueKind == JsonValueKind.Number && campania.TryGetInt32(out var campaignId))
+            {
+                if (!await db.Campaigns.AnyAsync(c => c.Id == campaignId))
+                    return BadRequest(new { message = $"No existe la campaña {campaignId}." });
+                prospect.CampaignId = campaignId;
+            }
+            else return BadRequest(new { message = "campaign_id tiene que ser un número o null." });
+        }
+
+        await db.SaveChangesAsync();
+
+        await db.Entry(prospect).Reference(p => p.Zone).LoadAsync();
+        await db.Entry(prospect).Reference(p => p.AssignedTo).LoadAsync();
         return Ok(prospect);
     }
 

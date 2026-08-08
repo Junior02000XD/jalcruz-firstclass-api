@@ -47,6 +47,13 @@ public class AgentContextController(AppDbContext db) : ControllerBase
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow + BoliviaOffset);
 
+        // Por id y no por nombre: el nombre se edita desde el panel y el orden
+        // tiene que ser estable, o el prompt cacheado cambia de bytes.
+        var zones = await db.Zones.AsNoTracking()
+            .OrderBy(z => z.Id)
+            .Select(z => new AgentZoneDto(z.Id, z.Name))
+            .ToListAsync();
+
         var entries = await db.ContextEntries.AsNoTracking()
             .Include(c => c.Zones).ThenInclude(z => z.Zone)
             .Include(c => c.HandoffToUser)
@@ -94,6 +101,7 @@ public class AgentContextController(AppDbContext db) : ControllerBase
 
         return Ok(new AgentContextResponse(
             new AgentPersonaDto(persona.Id, persona.PhoneNumberId, persona.StyleGuide, persona.UserId, persona.User.Name),
+            zones,
             ordered));
     }
 }

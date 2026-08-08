@@ -135,7 +135,9 @@ public class PeopleController(AppDbContext db) : ControllerBase
         if (cambios.TryGetProperty("city_id", out var ciudad))
         {
             if (ciudad.ValueKind == JsonValueKind.Null) person.CityId = null;
-            else if (ciudad.TryGetInt32(out var cityId))
+            // El ValueKind se comprueba ANTES: TryGetInt32 sobre un JSON de texto no
+            // devuelve false, lanza — y un tipo mal mandado saldría como 500.
+            else if (ciudad.ValueKind == JsonValueKind.Number && ciudad.TryGetInt32(out var cityId))
             {
                 if (!await db.Cities.AnyAsync(c => c.Id == cityId))
                     return BadRequest(new { message = $"No existe la ciudad {cityId}." });

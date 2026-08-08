@@ -202,7 +202,14 @@ public record AgentContextEntryDto(
 
 public record AgentPersonaDto(int Id, string PhoneNumberId, string StyleGuide, int UserId, string UserName);
 
-public record AgentContextResponse(AgentPersonaDto Persona, IReadOnlyList<AgentContextEntryDto> Entries);
+// Las zonas van completas y no sólo las que alguna promoción restringe: el
+// agente necesita el catálogo entero para poder registrar de qué zona es el
+// prospecto cuando se lo dice. Con la lista derivada de las fichas, una zona
+// sin promoción propia era invisible y ese dato se perdía.
+public record AgentContextResponse(
+    AgentPersonaDto Persona,
+    IReadOnlyList<AgentZoneDto> Zones,
+    IReadOnlyList<AgentContextEntryDto> Entries);
 
 public record EnrollmentInput(
     [Required] int ProspectId,
