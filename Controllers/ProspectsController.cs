@@ -15,8 +15,24 @@ namespace JalcruzFirstClass.Api.Controllers;
 [Authorize(Roles = $"{Roles.CrmAdmin},{Roles.SuperAdmin}")]
 public class ProspectsController(AppDbContext db) : ControllerBase
 {
+    /// <summary>
+    /// Listado de prospectos. Dos formas de respuesta:
+    ///
+    /// - **Sin `page`**: el array completo, como siempre. Lo usan los selectores de
+    ///   Clases de prueba y Ventas, que necesitan a todos.
+    /// - **Con `page`**: una página, para la pantalla de Prospectos, que con ~900
+    ///   contactos (y creciendo, uno por cada persona que escribe al WhatsApp)
+    ///   bajaba todo junto con sus teléfonos, campaña y zona en cada visita.
+    ///   Devuelve `{ data, total, page, page_size, counts }`, donde `counts` son los
+    ///   totales por estado con la búsqueda aplicada pero SIN el filtro de estado:
+    ///   son los números de las pestañas, que no pueden salir de una sola página.
+    /// </summary>
     [HttpGet]
-    public async Task<IActionResult> Index([FromQuery] string? status)
+    public async Task<IActionResult> Index(
+        [FromQuery] string? status,
+        [FromQuery] string? search,
+        [FromQuery] int? page,
+        [FromQuery(Name = "page_size")] int? pageSize)
     {
         // Phones hace falta acá y no sólo en Show: el listado del panel muestra el
         // número y busca por él. Sin el ThenInclude todos salían "Sin teléfono"
@@ -27,13 +43,50 @@ public class ProspectsController(AppDbContext db) : ControllerBase
             .Include(p => p.Zone)
             .AsQueryable();
 
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = $"%{search.Trim()}%";
+            // Por teléfono se compara sólo dígitos contra la forma normalizada (con
+            // 591): "7771-2345", "77712345" y "+591 77712345" encuentran el mismo.
+            // Con menos de 3 dígitos no se busca por número: "2" coincidiría con todos.
+            var digits = new string(search.Where(char.IsDigit).ToArray());
+            var porTelefono = digits.Length >= 3 ? $"%{digits}%" : null;
+
+            query = query.Where(p =>
+                EF.Functions.ILike(p.Person.FirstName + " " + p.Person.LastName, term)
+                || (p.Origin != null && EF.Functions.ILike(p.Origin, term))
+                || (porTelefono != null && p.Person.Phones.Any(ph =>
+                    ph.NormalizedNumber != null && EF.Functions.Like(ph.NormalizedNumber, porTelefono))));
+        }
+
+        // Los números de las pestañas: con la búsqueda, antes del filtro de estado.
+        Dictionary<string, int>? counts = null;
+        if (page is not null)
+        {
+            counts = EnumMaps.ProspectStatus.Values.ToDictionary(v => v, _ => 0);
+            var porEstado = await query.GroupBy(p => p.Status)
+                .Select(g => new { g.Key, Total = g.Count() })
+                .ToListAsync();
+            foreach (var e in porEstado) counts[EnumMaps.ProspectStatus[e.Key]] = e.Total;
+        }
+
         if (!string.IsNullOrWhiteSpace(status))
         {
             var parsed = ParseStatus(status);
             query = query.Where(p => p.Status == parsed);
         }
 
-        return Ok(await query.OrderByDescending(p => p.Id).ToListAsync());
+        query = query.OrderByDescending(p => p.Id);
+
+        if (page is null)
+            return Ok(await query.ToListAsync());
+
+        var size = Math.Clamp(pageSize ?? 25, 1, 100);
+        var total = await query.CountAsync();
+        var actual = Math.Max(1, page.Value);
+        var data = await query.Skip((actual - 1) * size).Take(size).ToListAsync();
+
+        return Ok(new { data, total, page = actual, page_size = size, counts });
     }
 
     [HttpGet("{id:int}")]
