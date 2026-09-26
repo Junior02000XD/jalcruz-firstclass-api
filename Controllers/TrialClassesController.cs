@@ -36,7 +36,7 @@ public class TrialClassesController(AppDbContext db) : ControllerBase
         {
             ProspectId = input.ProspectId,
             TeacherId = input.TeacherId,
-            Schedule = DateTime.SpecifyKind(input.Schedule, DateTimeKind.Unspecified),
+            Schedule = ToUtc(input.Schedule),
             AttendanceBool = input.AttendanceBool ?? false,
             Status = ParseStatus(input.Status),
             ReprogrammedFromId = input.ReprogrammedFromId,
@@ -53,11 +53,13 @@ public class TrialClassesController(AppDbContext db) : ControllerBase
         if (tc is null) return NotFound();
         tc.ProspectId = input.ProspectId;
         tc.TeacherId = input.TeacherId;
-        tc.Schedule = DateTime.SpecifyKind(input.Schedule, DateTimeKind.Unspecified);
+        tc.Schedule = ToUtc(input.Schedule);
         tc.AttendanceBool = input.AttendanceBool ?? tc.AttendanceBool;
         if (!string.IsNullOrWhiteSpace(input.Status))
             tc.Status = ParseStatus(input.Status);
-        tc.ReprogrammedFromId = input.ReprogrammedFromId;
+        // Se conserva si no viene: el panel no lo edita y un PUT sin él
+        // cortaba el vínculo con la clase original.
+        tc.ReprogrammedFromId = input.ReprogrammedFromId ?? tc.ReprogrammedFromId;
         await db.SaveChangesAsync();
         return Ok(tc);
     }
@@ -71,6 +73,19 @@ public class TrialClassesController(AppDbContext db) : ControllerBase
         await db.SaveChangesAsync();
         return NoContent();
     }
+
+    /// <summary>
+    /// `schedule` es timestamptz y Npgsql rechaza un DateTime con Kind=Unspecified:
+    /// con el SpecifyKind(Unspecified) de antes, crear o editar una clase daba 500
+    /// siempre. Mismo criterio que RemindersController: sin sufijo se toma como UTC.
+    /// El panel manda ISO con Z (convierte la hora local de Bolivia antes).
+    /// </summary>
+    private static DateTime ToUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+    };
 
     private static TrialClassStatus ParseStatus(string? value)
     {

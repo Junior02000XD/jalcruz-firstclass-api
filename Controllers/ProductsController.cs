@@ -48,6 +48,9 @@ public class ProductsController(AppDbContext db) : ControllerBase
     {
         var product = await db.Products.FindAsync(id);
         if (product is null) return NotFound();
+        // La FK de ventas es Restrict: sin este chequeo el borrado daba 500.
+        if (await db.Enrollments.AnyAsync(e => e.ProductId == id))
+            return Conflict(new { message = "Este producto tiene ventas registradas y no se puede borrar." });
         db.Products.Remove(product);
         await db.SaveChangesAsync();
         return NoContent();

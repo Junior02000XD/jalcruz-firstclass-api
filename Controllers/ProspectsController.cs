@@ -18,8 +18,11 @@ public class ProspectsController(AppDbContext db) : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Index([FromQuery] string? status)
     {
+        // Phones hace falta acá y no sólo en Show: el listado del panel muestra el
+        // número y busca por él. Sin el ThenInclude todos salían "Sin teléfono"
+        // aunque el número estuviera guardado.
         var query = db.Prospects.AsNoTracking()
-            .Include(p => p.Person)
+            .Include(p => p.Person).ThenInclude(pe => pe.Phones)
             .Include(p => p.Campaign)
             .Include(p => p.Zone)
             .AsQueryable();
@@ -140,11 +143,17 @@ public class ProspectsController(AppDbContext db) : ControllerBase
                 await db.SaveChangesAsync();
             }
 
+            // Un id de campaña o zona que ya no existe se descarta en vez de reventar
+            // con la FK: se pierde la atribución, no el lead. Pasa si alguien borra
+            // una campaña mientras n8n todavía la tiene mapeada.
+            var campaignId = input.CampaignId is int c && await db.Campaigns.AnyAsync(x => x.Id == c) ? c : (int?)null;
+            var zoneId = input.ZoneId is int z && await db.Zones.AnyAsync(x => x.Id == z) ? z : (int?)null;
+
             var prospect = new Prospect
             {
                 PersonId = person.Id,
-                CampaignId = input.CampaignId,
-                ZoneId = input.ZoneId,
+                CampaignId = campaignId,
+                ZoneId = zoneId,
                 Origin = input.Origin,
                 Address = input.Address,
                 Notes = input.Notes,
@@ -155,8 +164,15 @@ public class ProspectsController(AppDbContext db) : ControllerBase
 
             await tx.CommitAsync();
 
-            await db.Entry(prospect).Reference(p => p.Person).LoadAsync();
-            return CreatedAtAction(nameof(Show), new { id = prospect.Id }, prospect);
+            // Misma forma que la respuesta 200 (campaign, zone, assigned_to, phones):
+            // quien llama no tiene que distinguir "lo creé" de "ya existía".
+            var creado = normalized is not null ? await FindByNormalizedPhoneAsync(normalized) : null;
+            if (creado is null)
+            {
+                await db.Entry(prospect).Reference(p => p.Person).LoadAsync();
+                creado = prospect;
+            }
+            return CreatedAtAction(nameof(Show), new { id = prospect.Id }, creado);
         }
         catch (DbUpdateException ex) when (normalized is not null && IsUniqueViolation(ex))
         {
@@ -297,15 +313,28 @@ public class ProspectsController(AppDbContext db) : ControllerBase
     /// confundirse con "no lo mandé".
     /// </summary>
     [HttpPatch("{id:int}/assignment")]
-    public async Task<IActionResult> UpdateAssignment(int id, ProspectAssignmentPatchInput input)
+    public async Task<IActionResult> UpdateAssignment(int id, [FromBody] JsonElement cuerpo)
     {
+        // JSON crudo y no DTO, por lo mismo que los otros PATCH: con un DTO, un
+        // cuerpo `{}` o con la clave mal escrita llegaba como null y DEVOLVÍA la
+        // conversación a la IA sin avisar. Acá la clave tiene que venir.
+        if (cuerpo.ValueKind != JsonValueKind.Object
+            || !cuerpo.TryGetProperty("assigned_to_user_id", out var valor))
+            return BadRequest(new { message = "Falta assigned_to_user_id (null para devolvérselo a la IA)." });
+
+        int? asignado;
+        if (valor.ValueKind == JsonValueKind.Null) asignado = null;
+        else if (valor.ValueKind == JsonValueKind.Number && valor.TryGetInt32(out var n)) asignado = n;
+        else if (valor.ValueKind == JsonValueKind.String && int.TryParse(valor.GetString(), out var ns)) asignado = ns;
+        else return BadRequest(new { message = "assigned_to_user_id tiene que ser un número o null." });
+
         var prospect = await db.Prospects.FindAsync(id);
         if (prospect is null) return NotFound();
 
-        if (input.AssignedToUserId is int userId && !await db.Users.AnyAsync(u => u.Id == userId))
+        if (asignado is int userId && !await db.Users.AnyAsync(u => u.Id == userId))
             return BadRequest(new { message = $"No existe el usuario {userId}." });
 
-        prospect.AssignedToUserId = input.AssignedToUserId;
+        prospect.AssignedToUserId = asignado;
         await db.SaveChangesAsync();
 
         await db.Entry(prospect).Reference(p => p.AssignedTo).LoadAsync();

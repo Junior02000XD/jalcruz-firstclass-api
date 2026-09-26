@@ -127,10 +127,7 @@ public record ProspectQuickInput(
 // que el payload no traiga. Lo usa el agente de n8n tras cada conversación.
 public record ProspectStatusPatchInput([Required] string Status);
 
-// Hand-off: asignar el prospecto a un humano o devolvérselo a la IA.
-// Va aparte del PATCH de estado a propósito: al ser el único campo del cuerpo,
-// mandar null significa "limpiar" sin ambigüedad con "no lo mandé".
-public record ProspectAssignmentPatchInput(int? AssignedToUserId);
+// El PATCH de asignación lee JSON crudo (ver ProspectsController.UpdateAssignment).
 
 public record ReminderInput(
     [Required] int ProspectId,

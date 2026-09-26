@@ -33,10 +33,13 @@ public class WorkerDetailsController(AppDbContext db) : ControllerBase
         if (await db.WorkerDetails.AnyAsync(w => w.PersonId == input.PersonId))
             return BadRequest(new { message = "Esta persona ya tiene una ficha de trabajador." });
 
+        if (ParseReliability(input.Reliability) is not Reliability confiabilidad)
+            return BadRequest(new { message = ValorInvalido(input.Reliability) });
+
         var worker = new WorkerDetail
         {
             PersonId = input.PersonId,
-            Reliability = ParseReliability(input.Reliability),
+            Reliability = confiabilidad,
         };
         db.WorkerDetails.Add(worker);
         await db.SaveChangesAsync();
@@ -48,7 +51,9 @@ public class WorkerDetailsController(AppDbContext db) : ControllerBase
     {
         var worker = await db.WorkerDetails.FindAsync(id);
         if (worker is null) return NotFound();
-        worker.Reliability = ParseReliability(input.Reliability);
+        if (ParseReliability(input.Reliability) is not Reliability confiabilidad)
+            return BadRequest(new { message = ValorInvalido(input.Reliability) });
+        worker.Reliability = confiabilidad;
         await db.SaveChangesAsync();
         return Ok(worker);
     }
@@ -63,13 +68,21 @@ public class WorkerDetailsController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    private static Reliability ParseReliability(string? value)
+    /// <summary>
+    /// Vacío = "bueno". Un valor que no se reconoce devuelve null y el endpoint
+    /// responde 400: antes caía en silencio a "bueno", y como el panel mandaba
+    /// "Alta"/"Media"/"Baja", nadie podía quedar marcado como riesgoso.
+    /// </summary>
+    private static Reliability? ParseReliability(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return Reliability.Good;
         // Acepta tanto el valor persistido ("bueno") como el nombre del enum ("Good").
         var match = EnumMaps.Reliability.FirstOrDefault(kv =>
             string.Equals(kv.Value, value, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(kv.Key.ToString(), value, StringComparison.OrdinalIgnoreCase));
-        return match.Value is null ? Reliability.Good : match.Key;
+        return match.Value is null ? null : match.Key;
     }
+
+    private static string ValorInvalido(string? value) =>
+        $"Confiabilidad desconocida: \"{value}\". Valores válidos: {string.Join(", ", EnumMaps.Reliability.Values)}.";
 }

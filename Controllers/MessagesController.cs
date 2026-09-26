@@ -55,13 +55,18 @@ public class MessagesController(AppDbContext db) : ControllerBase
             if (known is not null) return Ok(known);
         }
 
+        // Un adjunto que se borró del catálogo entre que el agente lo eligió y se
+        // registra el envío: el mensaje se guarda igual, sin el vínculo. Antes la
+        // FK tiraba 500 y el mensaje ya enviado quedaba fuera del historial.
+        var mediaAssetId = input.MediaAssetId is int m && await db.MediaAssets.AnyAsync(a => a.Id == m) ? m : (int?)null;
+
         var message = new Message
         {
             ProspectId = input.ProspectId,
             Direction = direction,
             Origin = origin,
             Content = input.Content ?? "",   // un adjunto sin epígrafe no trae texto
-            MediaAssetId = input.MediaAssetId,
+            MediaAssetId = mediaAssetId,
             WhatsappMediaUrl = input.WhatsappMediaUrl,
             WhatsappMessageId = wamid,
         };

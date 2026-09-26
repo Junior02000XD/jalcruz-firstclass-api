@@ -48,13 +48,13 @@ public class PeopleController(AppDbContext db) : ControllerBase
             CityId = input.CityId,
             FirstName = input.FirstName,
             LastName = input.LastName,
-            Ci = input.Ci,
-            CiComplement = input.CiComplement,
-            Email = input.Email,
+            Ci = Vacio(input.Ci),
+            CiComplement = Vacio(input.CiComplement),
+            Email = Vacio(input.Email),
             BirthDate = input.BirthDate,
         };
         db.People.Add(person);
-        await db.SaveChangesAsync();
+        if (!await GuardarAsync()) return ConflictoDuplicado();
         return CreatedAtAction(nameof(Show), new { id = person.Id }, person);
     }
 
@@ -67,13 +67,34 @@ public class PeopleController(AppDbContext db) : ControllerBase
         person.CityId = input.CityId;
         person.FirstName = input.FirstName;
         person.LastName = input.LastName;
-        person.Ci = input.Ci;
-        person.CiComplement = input.CiComplement;
-        person.Email = input.Email;
+        person.Ci = Vacio(input.Ci);
+        person.CiComplement = Vacio(input.CiComplement);
+        person.Email = Vacio(input.Email);
         person.BirthDate = input.BirthDate;
-        await db.SaveChangesAsync();
+        if (!await GuardarAsync()) return ConflictoDuplicado();
         return Ok(person);
     }
+
+    // `people.email` y `people.ci` son ÚNICOS, y Postgres admite muchos NULL pero
+    // un solo "". El formulario de RRHH manda "" cuando el campo queda vacío: sin
+    // esto, el segundo trabajador sin correo reventaba con un 500.
+    private static string? Vacio(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    private async Task<bool> GuardarAsync()
+    {
+        try
+        {
+            await db.SaveChangesAsync();
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return false;
+        }
+    }
+
+    private ConflictObjectResult ConflictoDuplicado() =>
+        Conflict(new { message = "Ese correo o CI ya está cargado en otra persona." });
 
     /// <summary>
     /// Actualización PARCIAL. La usa el agente de WhatsApp para completar lo que
