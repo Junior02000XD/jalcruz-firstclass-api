@@ -34,6 +34,19 @@ En Railway: **New Project** → agregarle dos servicios.
 
 Enlazar el Postgres al servicio de la API para que aparezca `DATABASE_URL`.
 
+**Serverless (desde el 2026-11-04).** En *Settings* de **los dos** servicios
+(API y Postgres) activar **Serverless**: duermen tras 5-10 min sin tráfico y el
+primer pedido los despierta (la primera respuesta puede tardar hasta 1-2 min;
+n8n la espera con el nodo `Despertar el CRM`). El ajuste recién aplica en el
+**próximo despliegue** del servicio, así que después de activarlo hay que hacer
+*Redeploy*.
+
+`railway.json` (en la raíz del repo) define el **pre-deploy**
+`dotnet JalcruzFirstClass.Api.dll --migrar`: aplica migraciones y siembra una
+vez por despliegue, y si falla Railway aborta el despliegue y deja el anterior.
+Conviene fijarle un *Pre-deploy Timeout* de ~300 s en el panel (por defecto no
+tiene límite y una migración colgada dejaría el despliegue trabado).
+
 ## 2. Variables de entorno del servicio API
 
 | Variable | Valor | Notas |
@@ -55,6 +68,7 @@ Enlazar el Postgres al servicio de la API para que aparezca `DATABASE_URL`.
 | `R2__SecretAccessKey` | token de API de R2 | |
 | `R2__Bucket` | `media` | |
 | `R2__PublicBaseUrl` | `https://media.cruzk.dev` | Dominio propio del bucket público |
+| `Startup__EjecutarSeeder` | `false` | Migrar y sembrar sólo en el pre-deploy, no en cada arranque: con Serverless cada despertar es un arranque. Sin la variable funciona igual, sólo arranca más lento |
 
 Las `R2__*` son opcionales para arrancar: si faltan, la API levanta igual y sólo
 `/api/media` responde 503. El bucket va **público detrás de un dominio propio**
