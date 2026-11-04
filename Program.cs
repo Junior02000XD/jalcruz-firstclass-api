@@ -90,8 +90,23 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// ── Migrar + sembrar al arrancar ──
-await DbSeeder.SeedAsync(app.Services, config, app.Logger);
+// ── Migrar + sembrar ──
+// En producción NO se hace al arrancar: Railway tiene la API en Serverless
+// (duerme tras ~10 min sin tráfico) y cada despertar tendría que esperar a que
+// Postgres también despierte antes de que Kestrel siquiera abra el puerto. Ahí
+// lo corre el pre-deploy de railway.json (`--migrar`), UNA vez por despliegue,
+// y si falla Railway aborta el despliegue y deja la versión anterior.
+//
+// `Startup:EjecutarSeeder` vale true por defecto, así en local y en una base
+// nueva todo sigue como antes; en Railway se pone Startup__EjecutarSeeder=false.
+if (args.Contains("--migrar"))
+{
+    await DbSeeder.SeedAsync(app.Services, config, app.Logger);
+    app.Logger.LogInformation("Migraciones y siembra aplicadas (--migrar). Saliendo.");
+    return;
+}
+if (config.GetValue("Startup:EjecutarSeeder", true))
+    await DbSeeder.SeedAsync(app.Services, config, app.Logger);
 
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
@@ -103,6 +118,16 @@ app.MapControllers();
 
 app.MapGet("/", () => Results.Ok(new { service = "Jalcruz First Class API", status = "ok" }));
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
+// Sano de punta a punta: API despierta Y Postgres respondiendo. Lo usa n8n
+// ("Despertar el CRM") antes de la primera llamada de cada evento: con los dos
+// servicios en Serverless, el primer pedido puede encontrar la API levantándose
+// (502 de Railway) o la base todavía dormida, y n8n no reintenta respuestas HTTP
+// con error. Sin autenticación a propósito, igual que /health: no devuelve datos.
+app.MapGet("/health/db", async (AppDbContext db, CancellationToken ct) =>
+    await db.Database.CanConnectAsync(ct)
+        ? Results.Ok(new { status = "healthy", database = "ok" })
+        : Results.Json(new { status = "unhealthy", database = "unreachable" }, statusCode: 503));
 
 app.Run();
 

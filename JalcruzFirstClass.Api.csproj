@@ -4,6 +4,17 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      GC de estación de trabajo en vez del de servidor (el default de ASP.NET).
+      El de servidor reserva un heap por núcleo visible, y Railway expone hasta
+      8 vCPU: para una API que pasa el mes con la CPU en ~0 es RAM pagada por
+      nada, y en Railway la RAM es casi todo el costo (~$10 por GB al mes,
+      medido en la factura de octubre de 2026). Sin concurrente: el hilo de
+      fondo del GC tampoco aporta con esta carga.
+      Va junto con DOTNET_GCConserveMemory en el Dockerfile.
+    -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>
