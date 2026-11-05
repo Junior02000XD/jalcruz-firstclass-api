@@ -34,10 +34,13 @@ En Railway: **New Project** → agregarle dos servicios.
 
 Enlazar el Postgres al servicio de la API para que aparezca `DATABASE_URL`.
 
-**Serverless (desde el 2026-11-04).** En *Settings* de **los dos** servicios
-(API y Postgres) activar **Serverless**: duermen tras 5-10 min sin tráfico y el
-primer pedido los despierta (la primera respuesta puede tardar hasta 1-2 min;
-n8n la espera con el nodo `Despertar el CRM`). El ajuste recién aplica en el
+**Serverless (desde el 2026-11-04), SÓLO en la API.** En *Settings* del servicio
+de la API activar **Serverless**: duerme tras 5-10 min sin tráfico y el primer
+pedido la despierta (n8n la espera con el nodo `Despertar el CRM`). **Postgres
+queda siempre encendido, a propósito:** Julio tuvo una base Postgres en
+Serverless (plan gratis, en otro servicio) que a veces no volvía a encender, y
+una API que no despierta se recupera sola en el próximo pedido; una base que no
+despierta no. El ajuste recién aplica en el
 **próximo despliegue** del servicio, así que después de activarlo hay que hacer
 *Redeploy*.
 
